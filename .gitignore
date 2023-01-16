@@ -4,3 +4,4 @@ cache/*
 .payees
 .env
 .shares
+broadcast/*

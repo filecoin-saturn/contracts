@@ -2,9 +2,6 @@
 
 pragma solidity ^0.8.0;
 
-import "openzeppelin-contracts/utils/Address.sol";
-import "openzeppelin-contracts/utils/Context.sol";
-
 /**
  * @title PaymentSplitter
  * @dev This contract allows to split Ether payments among a group of accounts. The sender does not need to be aware
@@ -20,7 +17,7 @@ import "openzeppelin-contracts/utils/Context.sol";
  * function.
  *
  */
-contract PaymentSplitter is Context {
+contract PaymentSplitter {
     event PayeeAdded(address account, uint256 shares);
     event PaymentReleased(address to, uint256 amount);
     event PaymentReceived(address from, uint256 amount);
@@ -61,7 +58,7 @@ contract PaymentSplitter is Context {
      * functions].
      */
     receive() external payable virtual {
-        emit PaymentReceived(_msgSender(), msg.value);
+        emit PaymentReceived(msg.sender, msg.value);
     }
 
     /**
@@ -125,7 +122,8 @@ contract PaymentSplitter is Context {
             _released[account] += payment;
         }
 
-        Address.sendValue(account, payment);
+        bool sent = account.send(payment);
+        require(sent, "Failed to send Ether");
         emit PaymentReleased(account, payment);
     }
 
