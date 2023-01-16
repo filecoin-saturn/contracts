@@ -1,2 +1,6 @@
 out/*
 cache/*
+.secret
+.payees
+.env
+.shares
