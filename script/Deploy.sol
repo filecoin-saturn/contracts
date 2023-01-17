@@ -5,19 +5,20 @@ import "forge-std/Script.sol";
 import "../src/PaymentSplitter.sol";
 
 contract PaymentSplitterScript is Script {
-    function setUp() public {}
 
-    function run() public {
-        string memory seedPhrase = vm.readFile(".secret");
-        uint256 privateKey = vm.deriveKey(seedPhrase, 0);
+    address[] addresses;
+    uint256[] shares; 
+    uint256 privateKey; 
 
-        address[] memory addresses = new address[](1);
-        uint256[] memory shares = new uint256[](1);
+    function setUp() public {
 
+         string memory seedPhrase = vm.readFile(".secret");
+         privateKey = vm.deriveKey(seedPhrase, 0);
+      
         string memory payee = vm.readLine(".payees");
         while (keccak256(bytes(payee)) != keccak256("")) {
             address payeeAddr = vm.parseAddress(payee);
-            addresses[0] = payeeAddr;
+            addresses.push(payeeAddr);
             payee = vm.readLine(".payees");
         }
         console.log("read in payees");
@@ -25,17 +26,25 @@ contract PaymentSplitterScript is Script {
         string memory share = vm.readLine(".shares");
         while (keccak256(bytes(share)) != keccak256("")) {
             uint256 shareInt = vm.parseUint(share);
-            shares[0] = shareInt;
+            shares.push(shareInt);
             share = vm.readLine(".shares");
         }
-        console.log("read in shares");
 
         assert(addresses.length == shares.length);
+        console.log("read in shares");
+
+        // works for testing on a local EVM
+        vm.deal(vm.addr(privateKey), 5);
+
+
+    }
+
+    function run() public {
 
         vm.startBroadcast(privateKey);
-        PaymentSplitter spacebear = new PaymentSplitter(addresses, shares);
-        vm.deal(address(spacebear), 5);
-
+        PaymentSplitter splitter = new PaymentSplitter(addresses, shares);
+        bool sent = payable(address(splitter)).send(5);
+        assert(sent);
         vm.stopBroadcast();
     }
 }
