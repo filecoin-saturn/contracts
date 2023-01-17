@@ -5,5 +5,5 @@ libs = ['lib']
 fs_permissions = [{ access = "read", path = "./"}]
 
 [rpc_endpoints]
-wallaby = "${WALLABY_RPC_URL}"
+hyperspace = "${HYPERSPACE_RPC_URL}"
 

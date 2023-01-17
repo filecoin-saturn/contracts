@@ -44,9 +44,8 @@ contract PaymentSplitterTest is Test {
                 // zero address
                 addresses[i] != address(0) &&
                     // reserved addresses
-                    addresses[i] !=
-                    0x7109709ECfa91a80626fF3989D68f67F5b1DD12D &&
-                    addresses[i] != 0x0000000000000000000000000000000000000009
+                    uint160(addresses[i]) >
+                    uint160(0x0000000000000000000000000000000000000010)
             );
             shares[i] = 1;
         }
@@ -54,7 +53,9 @@ contract PaymentSplitterTest is Test {
         splitter = new PaymentSplitter(addresses, shares);
         vm.deal(address(splitter), addresses.length);
         for (uint256 i = 0; i < addresses.length; i++) {
+            vm.assume(addresses[i] != address(splitter));
             splitter.release(payable(addresses[i]));
+            assert(addresses[i].balance == 1);
         }
     }
 }
