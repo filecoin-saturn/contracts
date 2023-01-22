@@ -78,7 +78,7 @@ Finally you need a `.secret` file which includes the list of mnemonic words for 
 
 You need to set an environment variable for the Filecoin testnet we want to use. This can be done via an environment variable or a `.env` file that is then sourced. For instance: 
 ```bash 
-HYPERSPACE_RPC_URL="https://hyperscape.node.glif.io/rpc/v0"
+HYPERSPACE_RPC_URL="https://api.hyperspace.node.glif.io/rpc/v0"
 ```
 
 To deploy the contract with a local instance of the EVM, and pre-fill it with ETH you can run the deployment script. 
