@@ -45,7 +45,6 @@ function release(address payable account) public virtual {...}
 
 We recommend installing `foundry` from source: 
 ```bash
-```sh
 git clone https://github.com/foundry-rs/foundry
 cd foundry
 # install cast + forge
