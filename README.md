@@ -40,6 +40,33 @@ function release(address payable account) public virtual {...}
 ```
 
 
+The second contract is an evaluation factory contract, which can incrementally keep a record ofhow much payees are owed over an epoch. The core functionality of this contract such as rewarding a payee more shares or spinning up a new payment splitter contract can only be called by an admin user of the contract, defined when constructing it. 
+
+```solidity 
+ /**
+* @dev Reward a payee.
+* @param account The address of the payee.
+* @param shares_ The number of shares owned by the payee.
+*/
+function rewardPayee(address account, uint256 shares_)
+	external
+	onlyRole(DEFAULT_ADMIN_ROLE) {...}
+```
+
+The payout function sets the mapping of payees to rewards in stone by spinning up a new `PaymentSplitter` contract which holds this map. As  `PaymentSplitter` cannot be updated after instantiation we effectively fix the rewards for that time period permanently. On the `EvaluationFactory` contract the variable and mapping which kept a running log of which payee is owed what are reset. The method returns the address of the newly generated `PaymentSplitter`.
+
+```solidity 
+/*
+* @dev Spins up a new payment splitter using the contract's _shares and _payees variables. By the end of process
+* both variables will be reset as they are set in stone by the new PaymentSplitter instance.
+*/
+function payout()
+	external
+	onlyRole(DEFAULT_ADMIN_ROLE)
+	returns (address instance) {...}
+```
+    
+
 ## How to 
 
 
@@ -58,6 +85,10 @@ To run tests:
 forge test
 ```
 ### Deployment
+
+> TODO: create a deployment script for the factory contract
+
+#### PaymentSplitter
 
 To deploy the contracts to the hyperspace testnet you need to create a list of payees in a `.payees`. This is a new line delineated list of address we want to send payouts to. For instance: 
 ```bash

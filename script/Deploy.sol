@@ -40,7 +40,8 @@ contract PaymentSplitterScript is Script {
 
     function run() public {
         vm.startBroadcast(privateKey);
-        PaymentSplitter splitter = new PaymentSplitter(addresses, shares);
+        PaymentSplitter splitter = new PaymentSplitter();
+        splitter.initialize(addresses, shares);
         bool sent = payable(address(splitter)).send(totalShares);
         assert(sent);
         vm.stopBroadcast();
