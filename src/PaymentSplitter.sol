@@ -18,6 +18,12 @@ import "../lib/openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
  * accounts but kept in this contract, and the actual transfer is triggered as a separate step by calling the {release}
  * function.
  *
+ * [CAUTION]
+ * ====
+ * Avoid leaving a contract uninitialized !
+ *
+ * An uninitialized contract can be taken over by an attacker
+ *
  */
 contract PaymentSplitter is Initializable {
     event PayeeAdded(address account, uint256 shares);
@@ -129,7 +135,7 @@ contract PaymentSplitter is Initializable {
         }
 
         bool sent = account.send(payment);
-        require(sent, "Failed to send FIL");
+        require(sent, "PaymentSplitter: Failed to send FIL");
         emit PaymentReleased(account, payment);
     }
 

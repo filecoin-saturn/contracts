@@ -24,7 +24,7 @@ The first contract implements a simple payment splitter which, when instantiated
 * All addresses in `payees` must be non-zero. Both arrays must have the same non-zero length, and there must be no
 * duplicates in `payees`.
 */
-constructor(address[] memory payees, uint256[] memory shares_) payable {...}
+initialize(address[] memory payees, uint256[] memory shares_) payable {...}
 
 ```
 
@@ -40,10 +40,48 @@ function release(address payable account) public virtual {...}
 ```
 
 
-The second contract is an evaluation factory contract, which can incrementally keep a record ofhow much payees are owed over an epoch. The core functionality of this contract such as rewarding a payee more shares or spinning up a new payment splitter contract can only be called by an admin user of the contract, defined when constructing it. 
+The second contract is a payout factory contract. Its core functionality, which is to instantiate and fund a new payment splitter contract, can only be invoked by the admin user of the contract, who is defined when constructing it. 
 
 ```solidity 
- /**
+/**
+* @dev Spins up a new payment splitter.
+*/
+function payout(address[] memory payees, uint256[] memory shares_)
+	external
+	onlyRole(DEFAULT_ADMIN_ROLE)
+	returns (address instance) {...}
+```
+
+The contract also keeps track of all past payout contracts such that we can query it for all unclaimed tokens linked to a specific account. If this value is non nil we can also release all funds linked to an account for all past payouts. 
+
+```solidity 
+/**
+* @dev Returns the total claimable amount over all previously generated payout contracts.
+* @param account The address of the payee.
+*/
+function releasable(address account)
+	external
+	view
+	returns (uint256 totalValue) {...}
+
+/**
+* @dev Releases all available funds in previously generated payout contracts.
+* @param account The address of the payee.
+*/
+function releaseAll(address account) external {...}
+
+/**
+* @dev Releases all available funds in a previously generated payout contract.
+* @param account The address of the payee.
+* @param index Index of the payout contract.
+*/
+function releasePayout(address account, uint256 index) external {...}
+```
+
+> TODO: currently new payouts are instantiated by passing `(address[] memory payees, uint256[] memory shares_)` to the `payout` function. Ideally we'd like to move to a model where these values are tallied up progressively as time goes on, perhaps using `rewardPayee` or `penalizePayee` or `banPayee` functions, all of which would give users insight into the expected payout for the _current epoch_ before a payout is generated. For instance: 
+
+```solidity 
+/**
 * @dev Reward a payee.
 * @param account The address of the payee.
 * @param shares_ The number of shares owned by the payee.
@@ -51,19 +89,6 @@ The second contract is an evaluation factory contract, which can incrementally k
 function rewardPayee(address account, uint256 shares_)
 	external
 	onlyRole(DEFAULT_ADMIN_ROLE) {...}
-```
-
-The payout function sets the mapping of payees to rewards in stone by spinning up a new `PaymentSplitter` contract which holds this map. As  `PaymentSplitter` cannot be updated after instantiation we effectively fix the rewards for that time period permanently. On the `EvaluationFactory` contract the variable and mapping which kept a running log of which payee is owed what are reset. The method returns the address of the newly generated `PaymentSplitter`.
-
-```solidity 
-/*
-* @dev Spins up a new payment splitter using the contract's _shares and _payees variables. By the end of process
-* both variables will be reset as they are set in stone by the new PaymentSplitter instance.
-*/
-function payout()
-	external
-	onlyRole(DEFAULT_ADMIN_ROLE)
-	returns (address instance) {...}
 ```
     
 
