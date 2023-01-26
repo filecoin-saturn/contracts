@@ -12,16 +12,15 @@ import "../lib/openzeppelin-contracts/contracts/access/AccessControl.sol";
  * function.
  */
 contract PayoutFactory is AccessControl {
+    event SplitterCreated(address newSplitter);
+    event PaymentReleased(address to, uint256 amount);
+    event PaymentReceived(address from, uint256 amount);
     using Clones for address;
 
     // past payout contracts
     address[] internal _payouts;
-
     // a dummy template for instantiating future splitting contracts
     address public immutable template = address(new PaymentSplitter());
-
-    event SplitterCreated(address newSplitter);
-    event RewardedPayee(address account, uint256 shares);
 
     /**
      * @dev Creates a new factory with an admin
@@ -29,6 +28,19 @@ contract PayoutFactory is AccessControl {
      **/
     constructor(address admin) {
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
+    }
+
+    /**
+     * @dev The FIL received will be logged with {PaymentReceived} events. Note that these events are not fully
+     * reliable: it's possible for a contract to receive FIL without triggering this function. This only affects the
+     * reliability of the events, and not the actual splitting of FIL.
+     *
+     * To learn more about this see the Solidity documentation for
+     * https://solidity.readthedocs.io/en/latest/contracts.html#fallback-function[fallback
+     * functions].
+     */
+    receive() external payable virtual {
+        emit PaymentReceived(msg.sender, msg.value);
     }
 
     /**
@@ -81,8 +93,9 @@ contract PayoutFactory is AccessControl {
      * @param account The address of the payee.
      */
     function releaseAll(address account) external {
+        uint256 claimable = this.releasable(account);
         require(
-            this.releasable(account) > 0,
+            claimable > 0,
             "PaymentSplitter: account has no shares to claim"
         );
         for (uint256 i = 0; i < _payouts.length; i++) {
@@ -91,6 +104,7 @@ contract PayoutFactory is AccessControl {
                 PaymentSplitter(payable(_payouts[i])).release(payable(account));
             }
         }
+        emit PaymentReleased(account, claimable);
     }
 
     /**
@@ -99,10 +113,13 @@ contract PayoutFactory is AccessControl {
      * @param index Index of the payout contract.
      */
     function releasePayout(address account, uint256 index) external {
+        uint256 claimable = PaymentSplitter(payable(_payouts[index]))
+            .releasable(account);
         require(
-            PaymentSplitter(payable(_payouts[index])).releasable(account) > 0,
+            claimable > 0,
             "PaymentSplitter: account has no shares to claim"
         );
         PaymentSplitter(payable(_payouts[index])).release(payable(account));
+        emit PaymentReleased(account, claimable);
     }
 }
