@@ -40,7 +40,7 @@ function release(address payable account) public virtual {...}
 ```
 
 
-The second contract is a payout factory contract. Its core functionality, which is to instantiate and fund a new payment splitter contract, can only be invoked by the admin user of the contract, who is defined when constructing it. 
+The second contract is a payout factory contract. Its core functionality, which is to instantiate and fund a new payment splitter contract, can only be invoked by the admin user of the contract. 
 
 ```solidity 
 /**
@@ -52,7 +52,7 @@ function payout(address[] memory payees, uint256[] memory shares_)
 	returns (address instance) {...}
 ```
 
-The contract also keeps track of all past payout contracts such that we can query it for all unclaimed tokens linked to a specific account. If this value is non nil we can also release all funds linked to an account for all past payouts. 
+The contract also keeps track of all past payout contracts such that we can query it for all unclaimed tokens linked to a specific address. If this value is non nil we can also release all funds linked to an address. 
 
 ```solidity 
 /**
@@ -78,7 +78,7 @@ function releaseAll(address account) external {...}
 function releasePayout(address account, uint256 index) external {...}
 ```
 
-> TODO: currently new payouts are instantiated by passing `(address[] memory payees, uint256[] memory shares_)` to the `payout` function. Ideally we'd like to move to a model where these values are tallied up progressively as time goes on, perhaps using `rewardPayee` or `penalizePayee` or `banPayee` functions, all of which would give users insight into the expected payout for the _current epoch_ before a payout is generated. For instance: 
+> TODO: currently new payouts are instantiated by passing `(address[] memory payees, uint256[] memory shares_)` to the `payout` function. Ideally we'd like to move to a model where these values are tallied up progressively as time goes on, perhaps using `rewardPayee` or `penalizePayee` or `banPayee` functions, all of which would give users insight into the expected payout for the _current epoch_ before a payout is generated. This could be done on a separate `Evaluator` contract which calls `PayoutFactory` at regular epochs. Example function:
 
 ```solidity 
 /**
