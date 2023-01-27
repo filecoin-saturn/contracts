@@ -111,9 +111,6 @@ forge test
 ```
 ### Deployment
 
-> TODO: create a deployment script for the factory contract
-
-#### PaymentSplitter
 
 To deploy the contracts to the hyperspace testnet you need to create a list of payees in a `.payees`. This is a new line delineated list of address we want to send payouts to. For instance: 
 ```bash
@@ -136,16 +133,20 @@ You need to set an environment variable for the Filecoin testnet we want to use.
 HYPERSPACE_RPC_URL="https://api.hyperspace.node.glif.io/rpc/v0"
 ```
 
-To deploy the contract with a local instance of the EVM, and pre-fill it with ETH you can run the deployment script. 
-```
-forge script script/Deploy.sol:PaymentSplitterScript --broadcast --verify 
-
+To deploy the factory contract with a local instance of the EVM, and pre-fill it with ETH you can run the deployment script. 
+```bash
+forge script script/Deploy.sol:FactoryDeployScript --broadcast --verify 
 ```
 
 To deploy it to the fEVM and prefill it with test FIL you can run it with the environment variable set previously. You also want to increase the gas estimate multiplier (TODO: finetune this value), and allow for many retries to fetch receipts from the RPC endpoint. You need to ensure that the address you provided the secret for previously has sufficient test FIL to payout _all the owed shares_ defined in `.shares`. 
+```bash
+forge script script/Deploy.sol:FactoryDeployScript --broadcast --verify --rpc-url ${HYPERSPACE_RPC_URL} --gas-estimate-multiplier 10000  
 ```
-forge script script/Deploy.sol:PaymentSplitterScript --broadcast --verify --rpc-url ${HYPERSPACE_RPC_URL} --gas-estimate-multiplier 10000 --retries 10 --delay 30 --slow
 
+
+You can then spin out a new payment splitter contract. First set `FACTORY_ADDRESS` to the deployed factory contract's ETH address. Then run: 
+```bash 
+forge script script/Payout.sol:PaymentSplitterScript --broadcast --verify --rpc-url ${HYPERSPACE_RPC_URL} --gas-estimate-multiplier 10000
 ```
 
 This command will return the testnet address, which you can check out on an [explorer](https://hyperspace.filfox.info/en). If you want to interact with the contract we recommend using `cast` (installed with forge). 
