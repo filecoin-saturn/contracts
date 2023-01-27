@@ -82,7 +82,8 @@ contract PayoutFactory is AccessControl {
         view
         returns (uint256 totalValue)
     {
-        for (uint256 i = 0; i < _payouts.length; i++) {
+        uint256 length = _payouts.length;
+        for (uint256 i = 0; i < length; i++) {
             PaymentSplitter rewards = PaymentSplitter(payable(_payouts[i]));
             totalValue += rewards.releasable(account);
         }
@@ -93,33 +94,23 @@ contract PayoutFactory is AccessControl {
      * @param account The address of the payee.
      */
     function releaseAll(address account) external {
-        uint256 claimable = this.releasable(account);
-        require(
-            claimable > 0,
-            "PaymentSplitter: account has no shares to claim"
-        );
-        for (uint256 i = 0; i < _payouts.length; i++) {
-            PaymentSplitter rewards = PaymentSplitter(payable(_payouts[i]));
-            if (rewards.releasable(account) > 0) {
-                PaymentSplitter(payable(_payouts[i])).release(payable(account));
-            }
+        uint256 length = _payouts.length;
+        for (uint256 i = 0; i < length; i++) {
+            _releasePayout(account, i);
         }
-        emit PaymentReleased(account, claimable);
     }
 
     /**
-     * @dev Releases all available funds in a previously generated payout contract.
+     * @dev Releases all available funds in a single previously generated payout contract.
      * @param account The address of the payee.
      * @param index Index of the payout contract.
      */
-    function releasePayout(address account, uint256 index) external {
+    function _releasePayout(address account, uint256 index) private {
         uint256 claimable = PaymentSplitter(payable(_payouts[index]))
             .releasable(account);
-        require(
-            claimable > 0,
-            "PaymentSplitter: account has no shares to claim"
-        );
-        PaymentSplitter(payable(_payouts[index])).release(payable(account));
-        emit PaymentReleased(account, claimable);
+        if (claimable > 0) {
+            PaymentSplitter(payable(_payouts[index])).release(payable(account));
+            emit PaymentReleased(account, claimable);
+        }
     }
 }
