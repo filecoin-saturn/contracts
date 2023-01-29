@@ -30,6 +30,7 @@ contract PaymentSplitterTest is Test {
         return true;
     }
 
+    // NOTE: we don't fuzz  payout amounts as this causes too many rejections for forge to extract statistically significant numbers
     function testRelease_withFuzzing(address[] calldata addresses) public {
         vm.assume(
             addresses.length > 0 &&
@@ -50,8 +51,9 @@ contract PaymentSplitterTest is Test {
             shares[i] = 1;
         }
 
-        splitter = new PaymentSplitter(addresses, shares);
-        vm.deal(address(splitter), addresses.length);
+        splitter = new PaymentSplitter();
+        splitter.initialize(addresses, shares);
+        vm.deal(address(splitter), splitter.totalShares());
         for (uint256 i = 0; i < addresses.length; i++) {
             vm.assume(addresses[i] != address(splitter));
             splitter.release(payable(addresses[i]));

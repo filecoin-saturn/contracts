@@ -24,7 +24,7 @@ The first contract implements a simple payment splitter which, when instantiated
 * All addresses in `payees` must be non-zero. Both arrays must have the same non-zero length, and there must be no
 * duplicates in `payees`.
 */
-constructor(address[] memory payees, uint256[] memory shares_) payable {...}
+initialize(address[] memory payees, uint256[] memory shares_) payable {...}
 
 ```
 
@@ -39,6 +39,58 @@ function release(address payable account) public virtual {...}
 
 ```
 
+
+The second contract is a payout factory contract. Its core functionality, which is to instantiate and fund a new payment splitter contract, can only be invoked by the admin user of the contract. 
+
+```solidity 
+/**
+* @dev Spins up a new payment splitter.
+*/
+function payout(address[] memory payees, uint256[] memory shares_)
+	external
+	onlyRole(DEFAULT_ADMIN_ROLE)
+	returns (address instance) {...}
+```
+
+The contract also keeps track of all past payout contracts such that we can query it for all unclaimed tokens linked to a specific address. If this value is non nil we can also release all funds linked to an address. 
+
+```solidity 
+/**
+* @dev Returns the total claimable amount over all previously generated payout contracts.
+* @param account The address of the payee.
+*/
+function releasable(address account)
+	external
+	view
+	returns (uint256 totalValue) {...}
+
+/**
+* @dev Releases all available funds in previously generated payout contracts.
+* @param account The address of the payee.
+*/
+function releaseAll(address account) external {...}
+
+/**
+* @dev Releases all available funds in a single previously generated payout contract.
+* @param account The address of the payee.
+* @param index Index of the payout contract.
+*/
+function _releasePayout(address account, uint256 index) private {...}
+```
+
+> TODO: currently new payouts are instantiated by passing `(address[] memory payees, uint256[] memory shares_)` to the `payout` function. Ideally we'd like to move to a model where these values are tallied up progressively as time goes on, perhaps using `rewardPayee` or `penalizePayee` or `banPayee` functions, all of which would give users insight into the expected payout for the _current epoch_ before a payout is generated. This could be done on a separate `Evaluator` contract which calls `PayoutFactory` at regular epochs. Example function:
+
+```solidity 
+/**
+* @dev Reward a payee.
+* @param account The address of the payee.
+* @param shares_ The number of shares owned by the payee.
+*/
+function rewardPayee(address account, uint256 shares_)
+	external
+	onlyRole(DEFAULT_ADMIN_ROLE) {...}
+```
+    
 
 ## How to 
 
@@ -58,6 +110,7 @@ To run tests:
 forge test
 ```
 ### Deployment
+
 
 To deploy the contracts to the hyperspace testnet you need to create a list of payees in a `.payees`. This is a new line delineated list of address we want to send payouts to. For instance: 
 ```bash
@@ -80,16 +133,20 @@ You need to set an environment variable for the Filecoin testnet we want to use.
 HYPERSPACE_RPC_URL="https://api.hyperspace.node.glif.io/rpc/v0"
 ```
 
-To deploy the contract with a local instance of the EVM, and pre-fill it with ETH you can run the deployment script. 
-```
-forge script script/Deploy.sol:PaymentSplitterScript --broadcast --verify 
-
+To deploy the factory contract with a local instance of the EVM, and pre-fill it with ETH you can run the deployment script. 
+```bash
+forge script script/Deploy.sol:FactoryDeployScript --broadcast --verify 
 ```
 
 To deploy it to the fEVM and prefill it with test FIL you can run it with the environment variable set previously. You also want to increase the gas estimate multiplier (TODO: finetune this value), and allow for many retries to fetch receipts from the RPC endpoint. You need to ensure that the address you provided the secret for previously has sufficient test FIL to payout _all the owed shares_ defined in `.shares`. 
+```bash
+forge script script/Deploy.sol:FactoryDeployScript --broadcast --verify --rpc-url ${HYPERSPACE_RPC_URL} --gas-estimate-multiplier 10000  
 ```
-forge script script/Deploy.sol:PaymentSplitterScript --broadcast --verify --rpc-url ${HYPERSPACE_RPC_URL} --gas-estimate-multiplier 10000 --retries 10 --delay 30 --slow
 
+
+You can then spin out a new payment splitter contract. First set `FACTORY_ADDRESS` to the deployed factory contract's ETH address. Then run: 
+```bash 
+forge script script/Payout.sol:PaymentSplitterScript --broadcast --verify --rpc-url ${HYPERSPACE_RPC_URL} --gas-estimate-multiplier 10000
 ```
 
 This command will return the testnet address, which you can check out on an [explorer](https://hyperspace.filfox.info/en). If you want to interact with the contract we recommend using `cast` (installed with forge). 
