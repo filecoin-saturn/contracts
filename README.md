@@ -71,11 +71,11 @@ function releasable(address account)
 function releaseAll(address account) external {...}
 
 /**
-* @dev Releases all available funds in a previously generated payout contract.
+* @dev Releases all available funds in a single previously generated payout contract.
 * @param account The address of the payee.
 * @param index Index of the payout contract.
 */
-function releasePayout(address account, uint256 index) external {...}
+function _releasePayout(address account, uint256 index) private {...}
 ```
 
 > TODO: currently new payouts are instantiated by passing `(address[] memory payees, uint256[] memory shares_)` to the `payout` function. Ideally we'd like to move to a model where these values are tallied up progressively as time goes on, perhaps using `rewardPayee` or `penalizePayee` or `banPayee` functions, all of which would give users insight into the expected payout for the _current epoch_ before a payout is generated. This could be done on a separate `Evaluator` contract which calls `PayoutFactory` at regular epochs. Example function:
