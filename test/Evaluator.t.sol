@@ -6,7 +6,7 @@ import "../src/PayoutFactory.sol";
 import "../src/Evaluator.sol";
 import "../src/PaymentSplitter.sol";
 
-contract EvaluatoorTest is Test {
+contract EvaluatorTest is Test {
     Evaluator public evaluator;
     PaymentSplitter public splitter;
 
