@@ -99,6 +99,8 @@ We recommend installing `foundry` from source:
 ```bash
 git clone https://github.com/foundry-rs/foundry
 cd foundry
+# (for compatibility with filecoin receipts during deploy)
+git checkout e840894
 # install cast + forge
 cargo install --path ./cli --profile local --bins --locked --force
 # install anvil
@@ -140,13 +142,13 @@ forge script script/Deploy.sol:FactoryDeployScript --broadcast --verify
 
 To deploy it to the fEVM and prefill it with test FIL you can run it with the environment variable set previously. You also want to increase the gas estimate multiplier (TODO: finetune this value), and allow for many retries to fetch receipts from the RPC endpoint. You need to ensure that the address you provided the secret for previously has sufficient test FIL to payout _all the owed shares_ defined in `.shares`. 
 ```bash
-forge script script/Deploy.sol:FactoryDeployScript --broadcast --verify --rpc-url ${HYPERSPACE_RPC_URL} --gas-estimate-multiplier 10000  
+forge script script/Deploy.sol:FactoryDeployScript --broadcast --verify --rpc-url ${HYPERSPACE_RPC_URL} --gas-estimate-multiplier 10000 --slow  
 ```
 
 
 You can then spin out a new payment splitter contract. First set `FACTORY_ADDRESS` to the deployed factory contract's ETH address. Then run: 
 ```bash 
-forge script script/Payout.sol:PaymentSplitterScript --broadcast --verify --rpc-url ${HYPERSPACE_RPC_URL} --gas-estimate-multiplier 10000
+forge script script/Payout.sol:PaymentSplitterScript --broadcast --verify --rpc-url ${HYPERSPACE_RPC_URL} --gas-estimate-multiplier 10000 --slow
 ```
 
 This command will return the testnet address, which you can check out on an [explorer](https://hyperspace.filfox.info/en). If you want to interact with the contract we recommend using `cast` (installed with forge). 
