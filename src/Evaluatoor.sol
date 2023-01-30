@@ -12,7 +12,6 @@ import "../lib/openzeppelin-contracts/contracts/access/AccessControl.sol";
  */
 contract Evaluatoor is AccessControl {
     event Payout(address newSplitter);
-    event PaymentReleased(address to, uint256 amount);
     event PaymentReceived(address from, uint256 amount);
     event RewardedPayee(address account, uint256 shares);
     using Clones for address;
@@ -51,7 +50,7 @@ contract Evaluatoor is AccessControl {
     }
 
     /**
-     * @dev Spins up a new payment splitter using _shares.
+     * @dev Spins up a new payment splitter using _shares as input to the factory contract payout function.
      */
     function payout()
         external
