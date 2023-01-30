@@ -3,12 +3,11 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
 import "../src/PayoutFactory.sol";
-import "../src/Evaluatoor.sol";
+import "../src/Evaluator.sol";
 import "../src/PaymentSplitter.sol";
 
 contract EvaluatoorTest is Test {
-    Evaluatoor public evaluator;
-    PayoutFactory public factory;
+    Evaluator public evaluator;
     PaymentSplitter public splitter;
 
     address[] testAddr = [makeAddr("Test")];
@@ -42,7 +41,7 @@ contract EvaluatoorTest is Test {
                 hasNoDuplicates(addresses)
         );
 
-        evaluator = new Evaluatoor(address(this));
+        evaluator = new Evaluator(address(this));
         vm.deal(address(evaluator), addresses.length * 10001);
 
         for (uint256 i = 0; i < addresses.length; i++) {
@@ -102,7 +101,7 @@ contract EvaluatoorTest is Test {
             );
         }
 
-        evaluator = new Evaluatoor(address(this));
+        evaluator = new Evaluator(address(this));
 
         vm.deal(address(evaluator), addresses.length * 12);
 

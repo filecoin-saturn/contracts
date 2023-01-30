@@ -10,7 +10,7 @@ import "../lib/openzeppelin-contracts/contracts/access/AccessControl.sol";
  * @title Evaluator contract
  * @dev This contract is an evaluator contract for tracking rewards for individual payees and then generating payouts.
  */
-contract Evaluatoor is AccessControl {
+contract Evaluator is AccessControl {
     event Payout(address newSplitter);
     event PaymentReceived(address from, uint256 amount);
     event RewardedPayee(address account, uint256 shares);
@@ -66,7 +66,7 @@ contract Evaluatoor is AccessControl {
         }
 
         bool sent = payable(factory).send(_totalShares);
-        require(sent, "Evaluatoor: Failed to send FIL");
+        require(sent, "Evaluator: Failed to send FIL");
 
         instance = factory.payout(_payees, sharesSnapshot);
 
@@ -110,9 +110,9 @@ contract Evaluatoor is AccessControl {
     {
         require(
             account != address(0),
-            "Evaluatoor: account is the zero address"
+            "Evaluator: account is the zero address"
         );
-        require(shares_ > 0, "Evaluatoor: shares are 0");
+        require(shares_ > 0, "Evaluator: shares are 0");
 
         // means this is a new payee
         if (_shares[_payoutIndex][account] == 0) {
