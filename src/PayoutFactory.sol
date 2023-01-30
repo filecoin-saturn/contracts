@@ -167,11 +167,13 @@ contract PayoutFactory is AccessControl {
      * @param index Index of the payout contract.
      */
     function _releasePayout(address account, uint256 index) private {
-        uint256 claimable = PaymentSplitter(payable(_payouts[index]))
-            .releasable(account);
+        PaymentSplitter splitter = PaymentSplitter(payable(_payouts[index]));
+
+        uint256 claimable = splitter.releasable(account);
+
         if (claimable > 0) {
+            splitter.release(payable(account));
             emit PaymentReleased(account, claimable);
-            PaymentSplitter(payable(_payouts[index])).release(payable(account));
         }
     }
 }
