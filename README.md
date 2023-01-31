@@ -120,6 +120,12 @@ pip3 install slither-analyzer
 slither .
 ```
 
+To run echidna fuzzing tests, first install [echidna](https://github.com/crytic/echidna), then you can find echidna specific tests within `test/echidna` and run: 
+
+```bash
+echidna-test test/echidna/PaymentSplitterTest.sol --contract TestPaymentSplitter --config echidnaconfig.yaml 
+```
+
 ### Deployment
 
 

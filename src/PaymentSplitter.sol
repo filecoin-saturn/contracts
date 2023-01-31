@@ -35,7 +35,7 @@ contract PaymentSplitter is Initializable {
 
     mapping(address => uint256) private _shares;
     mapping(address => uint256) private _released;
-    address[] private _payees;
+    address[] internal _payees;
 
     /**
      * @dev Creates an instance of `PaymentSplitter` where each account in `payees` is assigned the number of shares at
