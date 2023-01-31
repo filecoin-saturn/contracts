@@ -109,6 +109,15 @@ To run tests:
 ```bash
 forge test
 ```
+
+To run slither analyzer: 
+```bash 
+conda create -n contracts python=3.9
+conda activate contracts
+pip3 install slither-analyzer
+slither .
+```
+
 ### Deployment
 
 
