@@ -5,3 +5,4 @@ cache/*
 .env
 .shares
 broadcast/*
+crytic-export/*
