@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.2;
 
 import "../lib/openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 
@@ -133,10 +133,9 @@ contract PaymentSplitter is Initializable {
         unchecked {
             _released[account] += payment;
         }
-
+        emit PaymentReleased(account, payment);
         bool sent = account.send(payment);
         require(sent, "PaymentSplitter: Failed to send FIL");
-        emit PaymentReleased(account, payment);
     }
 
     /**

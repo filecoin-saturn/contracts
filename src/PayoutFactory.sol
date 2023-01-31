@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.2;
 
 import "./PaymentSplitter.sol";
 import "../lib/openzeppelin-contracts/contracts/proxy/Clones.sol";
@@ -18,7 +18,7 @@ contract PayoutFactory is AccessControl {
     using Clones for address;
 
     // past payout contracts
-    address[] public _payouts;
+    address[] private _payouts;
     // a dummy template for instantiating future splitting contracts
     address public immutable template = address(new PaymentSplitter());
 
@@ -61,6 +61,9 @@ contract PayoutFactory is AccessControl {
         // register
         _payouts.push(instance);
 
+        // emit event
+        emit SplitterCreated(instance);
+
         // initializes and locks in a payout
         PaymentSplitter splitter = PaymentSplitter(payable(instance));
         splitter.initialize(payees, shares_);
@@ -68,9 +71,6 @@ contract PayoutFactory is AccessControl {
         // if tokens were pre-added to this contract here's where we'd fund the new contract
         bool sent = payable(instance).send(splitter.totalShares());
         require(sent, "PayoutFactory: Failed to send FIL");
-
-        // emit event
-        emit SplitterCreated(instance);
     }
 
     /**
@@ -109,8 +109,8 @@ contract PayoutFactory is AccessControl {
         uint256 claimable = PaymentSplitter(payable(_payouts[index]))
             .releasable(account);
         if (claimable > 0) {
-            PaymentSplitter(payable(_payouts[index])).release(payable(account));
             emit PaymentReleased(account, claimable);
+            PaymentSplitter(payable(_payouts[index])).release(payable(account));
         }
     }
 }
