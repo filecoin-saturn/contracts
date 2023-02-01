@@ -24,7 +24,7 @@ jobs:
     - name: Compile
       run: |
         forge build --build-info
-        solc install 0.8.13
+        solc-select install 0.8.13    
 
     - name: Run tests
       run: forge test -vvv
