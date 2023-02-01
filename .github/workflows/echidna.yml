@@ -26,7 +26,7 @@ jobs:
         forge build --build-info
 
     - name: Run tests
-        run: forge test -vvv
+      run: forge test -vvv
 
     - name: Run Echidna
       uses: crytic/echidna-action@v2
