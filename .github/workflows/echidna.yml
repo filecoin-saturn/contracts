@@ -10,7 +10,9 @@ on:
 
 jobs:
   test:
-    name: Contract-Tests     
+    name: Contract-Tests
+    env:
+      SOLC_VERSION: 0.8.13   
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
