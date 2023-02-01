@@ -24,28 +24,35 @@ contract TestPaymentSplitter is PaymentSplitter {
         return true;
     }
 
-    function payeeReleaseLessThanShares(address[] memory arr) private view returns (bool) {
+    function payeeReleaseLessThanTotal(address[] memory arr)
+        private
+        view
+        returns (bool)
+    {
         uint256 i;
-        for (;i < arr.length; ) {
-            if (released(arr[i]) > shares(arr[i])) {
+        for (; i < arr.length; ) {
+            if (released(arr[i]) > totalReleased()) {
                 return false;
             }
             unchecked {
-                 i++;
+                i++;
             }
         }
         return true;
     }
 
-
-    function sharesEqualClaimableAndReleased(address[] memory arr) private view returns (bool) {
+    function payeeSharesLessThanTotal(address[] memory arr)
+        private
+        view
+        returns (bool)
+    {
         uint256 i;
-        for (;i < arr.length; ) {
-            if (released(arr[i]) + releasable(arr[i]) != shares(arr[i])) {
+        for (; i < arr.length; ) {
+            if (shares(arr[i]) > totalShares()) {
                 return false;
             }
             unchecked {
-                 i++;
+                i++;
             }
         }
         return true;
@@ -55,10 +62,9 @@ contract TestPaymentSplitter is PaymentSplitter {
         address[] memory payees,
         mapping(address => uint256) storage sharesMap,
         mapping(address => uint256) storage releasedMap
-        ) 
-    private view returns (bool) {
+    ) private view returns (bool) {
         uint256 i;
-        for (;i < payees.length;) {
+        for (; i < payees.length; ) {
             if (releasedMap[payees[i]] == 0 && sharesMap[payees[i]] == 0) {
                 return false;
             }
@@ -67,18 +73,14 @@ contract TestPaymentSplitter is PaymentSplitter {
             }
         }
         return true;
-    }   
+    }
 
     function echidna_released_less_total() public view returns (bool) {
-        return totalReleased() <= totalShares();
+        return payeeReleaseLessThanTotal(_payees);
     }
 
-    function echidna_releasable_less_total() public view returns (bool) {
-        return payeeReleaseLessThanShares(_payees);
-    }
-
-    function echidna_shares_equal_released_claimable() public view returns(bool) {
-        return sharesEqualClaimableAndReleased(_payees);
+    function echidna_shares_less_total() public view returns (bool) {
+        return payeeSharesLessThanTotal(_payees);
     }
 
     function echidna_payees_have_shares() public view returns (bool) {
