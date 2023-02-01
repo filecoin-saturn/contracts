@@ -24,8 +24,43 @@ contract TestPaymentSplitter is PaymentSplitter {
         return true;
     }
 
+    function payeeReleaseLessThanShares(address[] memory arr) private view returns (bool) {
+        uint256 i;
+        for (;i < arr.length; ) {
+            if (released(arr[i]) > shares(arr[i])) {
+                return false;
+            }
+            unchecked {
+                 i++;
+            }
+        }
+        return true;
+    }
+
+
+    function sharesEqualClaimableAndReleased(address[] memory arr) private view returns (bool) {
+        uint256 i;
+        for (;i < arr.length; ) {
+            if (released(arr[i]) + releasable(arr[i]) != shares(arr[i])) {
+                return false;
+            }
+            unchecked {
+                 i++;
+            }
+        }
+        return true;
+    }
+
     function echidna_released_less_total() public view returns (bool) {
         return totalReleased() <= totalShares();
+    }
+
+    function echidna_releasable_less_total() public view returns (bool) {
+        return payeeReleaseLessThanShares(_payees);
+    }
+
+    function echidna_shares_equal_released_claimable() public view returns(bool) {
+        return sharesEqualClaimableAndReleased(_payees);
     }
 
     function echidna_no_duplicate_payees() public returns (bool) {
