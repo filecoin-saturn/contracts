@@ -21,9 +21,10 @@ jobs:
     - name: Install Foundry
       uses: foundry-rs/foundry-toolchain@v1
 
-    - name: Compile contracts
+    - name: Compile
       run: |
         forge build --build-info
+        solc install 0.8.13
 
     - name: Run tests
       run: forge test -vvv
