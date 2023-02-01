@@ -42,6 +42,7 @@ jobs:
     - name: Run Echidna
       uses: crytic/echidna-action@v2
       with:
+        solc-version: 0.8.13
         files: test/echidna
         contract: TestPaymentSplitter
         crytic-args: --ignore-compile
