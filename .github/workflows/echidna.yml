@@ -33,7 +33,7 @@ jobs:
       run: |
         forge build --build-info
         solc-select install 0.8.13    
-
+        solc-select use 0.8.13
     - name: Run tests
       run: forge test -vvv
 
