@@ -74,6 +74,37 @@ contract PayoutFactory is AccessControl {
     }
 
     /**
+     * @dev Returns the total shares over all previously generated payout contracts.
+     */
+    function totalShares()
+        external
+        view
+        returns (uint256 totalValue)
+    {
+        uint256 length = _payouts.length;
+        for (uint256 i = 0; i < length; i++) {
+            PaymentSplitter rewards = PaymentSplitter(payable(_payouts[i]));
+            totalValue += rewards.totalShares();
+        }
+    }
+
+     /**
+     * @dev Returns the total released funds over all previously generated payout contracts.
+     */
+    function totalReleased()
+        external
+        view
+        returns (uint256 totalValue)
+    {
+        uint256 length = _payouts.length;
+        for (uint256 i = 0; i < length; i++) {
+            PaymentSplitter rewards = PaymentSplitter(payable(_payouts[i]));
+            totalValue += rewards.totalReleased();
+        }
+    }
+    
+    
+    /**
      * @dev Returns the total claimable amount over all previously generated payout contracts.
      * @param account The address of the payee.
      */
@@ -89,6 +120,37 @@ contract PayoutFactory is AccessControl {
         }
     }
 
+    /**
+     * @dev Returns the total released amount over all previously generated payout contracts.
+     * @param account The address of the payee.
+     */
+    function released(address account)
+        external
+        view
+        returns (uint256 totalValue)
+    {
+        uint256 length = _payouts.length;
+        for (uint256 i = 0; i < length; i++) {
+            PaymentSplitter rewards = PaymentSplitter(payable(_payouts[i]));
+            totalValue += rewards.released(account);
+        }
+    }
+
+    /**
+     * @dev Returns the total shares amount over all previously generated payout contracts.
+     * @param account The address of the payee.
+     */
+    function shares(address account)
+        external
+        view
+        returns (uint256 totalValue)
+    {
+        uint256 length = _payouts.length;
+        for (uint256 i = 0; i < length; i++) {
+            PaymentSplitter rewards = PaymentSplitter(payable(_payouts[i]));
+            totalValue += rewards.shares(account);
+        }
+    }
     /**
      * @dev Releases all available funds in previously generated payout contracts.
      * @param account The address of the payee.

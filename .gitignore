@@ -6,3 +6,4 @@ cache/*
 .shares
 broadcast/*
 crytic-export/*
+secrets/*
