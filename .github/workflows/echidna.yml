@@ -1,0 +1,36 @@
+name: Echidna Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Contract-Tests     
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      with:
+        submodules: recursive
+
+    - name: Install Foundry
+      uses: foundry-rs/foundry-toolchain@v1
+
+    - name: Compile contracts
+      run: |
+        forge build --build-info
+
+    - name: Run tests
+        run: forge test -vvv
+
+    - name: Run Echidna
+      uses: crytic/echidna-action@v2
+      with:
+        files: test/echidna
+        contract: TestPaymentSplitter
+        crytic-args: --ignore-compile
