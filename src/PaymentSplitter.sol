@@ -33,8 +33,8 @@ contract PaymentSplitter is Initializable {
     uint256 private _totalShares;
     uint256 private _totalReleased;
 
-    mapping(address => uint256) private _shares;
-    mapping(address => uint256) private _released;
+    mapping(address => uint256) internal _shares;
+    mapping(address => uint256) internal _released;
     address[] internal _payees;
 
     /**

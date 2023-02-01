@@ -51,6 +51,24 @@ contract TestPaymentSplitter is PaymentSplitter {
         return true;
     }
 
+    function eachPayeeHasShare(
+        address[] memory payees,
+        mapping(address => uint256) storage sharesMap,
+        mapping(address => uint256) storage releasedMap
+        ) 
+    private view returns (bool) {
+        uint256 i;
+        for (;i < payees.length;) {
+            if (releasedMap[payees[i]] == 0 && sharesMap[payees[i]] == 0) {
+                return false;
+            }
+            unchecked {
+                i++;
+            }
+        }
+        return true;
+    }   
+
     function echidna_released_less_total() public view returns (bool) {
         return totalReleased() <= totalShares();
     }
@@ -61,6 +79,10 @@ contract TestPaymentSplitter is PaymentSplitter {
 
     function echidna_shares_equal_released_claimable() public view returns(bool) {
         return sharesEqualClaimableAndReleased(_payees);
+    }
+
+    function echidna_payees_have_shares() public view returns (bool) {
+        return eachPayeeHasShare(_payees, _shares, _released);
     }
 
     function echidna_no_duplicate_payees() public returns (bool) {
