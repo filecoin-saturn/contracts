@@ -88,6 +88,13 @@ contract PaymentSplitter is Initializable {
     }
 
     /**
+     * @dev Getter for the payees.
+     */
+    function payees() public view returns (address[] memory) {
+        return _payees;
+    }
+
+    /**
      * @dev Getter for the amount of shares held by an account.
      */
     function shares(address account) public view returns (uint256) {

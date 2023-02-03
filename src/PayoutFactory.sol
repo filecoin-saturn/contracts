@@ -18,7 +18,7 @@ contract PayoutFactory is AccessControl {
     using Clones for address;
 
     // past payout contracts
-    address[] private _payouts;
+    address[] internal _payouts;
     // a dummy template for instantiating future splitting contracts
     address public immutable template = address(new PaymentSplitter());
 
