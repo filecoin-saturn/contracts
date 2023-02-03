@@ -43,6 +43,6 @@ jobs:
         SOLC_VERSION: 0.8.13   
       with:
         solc-version: 0.8.13
-        files: test/echidna
+        files: test/echidna/PaymentSplitterTest.sol
         contract: TestPaymentSplitter
         crytic-args: --ignore-compile

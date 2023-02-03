@@ -7,5 +7,5 @@ cache/*
 broadcast/*
 crytic-export/*
 secrets/*
-echidnaCorpus/*
+echidna-corpus/*
 .vscode/*
