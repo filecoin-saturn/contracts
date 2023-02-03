@@ -5,12 +5,26 @@ import "../../src/PayoutFactory.sol";
 import "../../src/PaymentSplitter.sol";
 
 contract TestPayoutFactory is PayoutFactory {
-
-   constructor()  PayoutFactory(address(0x00a329c0648769A73afAc7F9381E08FB43dBEA72)) payable {
-        _grantRole(DEFAULT_ADMIN_ROLE, address(0x0000000000000000000000000000000000010000));
-        _grantRole(DEFAULT_ADMIN_ROLE, address(0x0000000000000000000000000000000000020000));
-        _grantRole(DEFAULT_ADMIN_ROLE, address(0x0000000000000000000000000000000000030000));
-        _grantRole(DEFAULT_ADMIN_ROLE, address(0x00a329c0648769A73afAc7F9381E08FB43dBEA72));
+    constructor()
+        payable
+        PayoutFactory(address(0x00a329c0648769A73afAc7F9381E08FB43dBEA72))
+    {
+        _grantRole(
+            DEFAULT_ADMIN_ROLE,
+            address(0x0000000000000000000000000000000000010000)
+        );
+        _grantRole(
+            DEFAULT_ADMIN_ROLE,
+            address(0x0000000000000000000000000000000000020000)
+        );
+        _grantRole(
+            DEFAULT_ADMIN_ROLE,
+            address(0x0000000000000000000000000000000000030000)
+        );
+        _grantRole(
+            DEFAULT_ADMIN_ROLE,
+            address(0x00a329c0648769A73afAc7F9381E08FB43dBEA72)
+        );
     }
 
     mapping(address => bool) Addr;
@@ -43,8 +57,7 @@ contract TestPayoutFactory is PayoutFactory {
             address[] memory payees = splitter.payees();
             uint256 contractReleased = 0;
             uint256 j;
-            for(; j < payees.length;) {
-
+            for (; j < payees.length; ) {
                 address payee = payees[j];
                 if (splitter.released(payee) > splitter.totalReleased()) {
                     return false;
@@ -78,8 +91,7 @@ contract TestPayoutFactory is PayoutFactory {
             address[] memory payees = splitter.payees();
             uint256 contractShares = 0;
             uint256 j;
-            for(; j < payees.length;) {
-
+            for (; j < payees.length; ) {
                 address payee = payees[j];
                 if (splitter.shares(payee) > splitter.totalShares()) {
                     return false;
@@ -102,13 +114,13 @@ contract TestPayoutFactory is PayoutFactory {
         return true;
     }
 
-
-    function eachContractHasPayees(
-        address[] memory arr
-    ) private view returns (bool) {
+    function eachContractHasPayees(address[] memory arr)
+        private
+        view
+        returns (bool)
+    {
         uint256 i;
         for (; i < arr.length; ) {
-
             PaymentSplitter splitter = PaymentSplitter(payable(arr[i]));
             address[] memory payees = splitter.payees();
 
