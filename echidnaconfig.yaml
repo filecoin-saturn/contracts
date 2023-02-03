@@ -1,2 +1,3 @@
 estimateGas: true
 multi-abi: true
+corpusDir: "./echidnaCorpus"
