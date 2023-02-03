@@ -37,7 +37,7 @@ jobs:
     - name: Run tests
       run: forge test -vvv
 
-    - name: Run Echidna
+    - name: Echidna Tests on PaymentSplitter
       uses: crytic/echidna-action@v2
       env:
         SOLC_VERSION: 0.8.13   
@@ -45,4 +45,13 @@ jobs:
         solc-version: 0.8.13
         files: test/echidna/PaymentSplitterTest.sol
         contract: TestPaymentSplitter
+        crytic-args: --ignore-compile
+    - name: Echidna Tests on PayoutFactory
+      uses: crytic/echidna-action@v2
+      env:
+        SOLC_VERSION: 0.8.13   
+      with:
+        solc-version: 0.8.13
+        files: test/echidna/PayoutFactoryTest.sol
+        contract: TestPayoutFactory
         crytic-args: --ignore-compile
