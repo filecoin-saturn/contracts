@@ -15,14 +15,6 @@ contract TestPayoutFactory is PayoutFactory {
         );
         _grantRole(
             DEFAULT_ADMIN_ROLE,
-            address(0x0000000000000000000000000000000000020000)
-        );
-        _grantRole(
-            DEFAULT_ADMIN_ROLE,
-            address(0x0000000000000000000000000000000000030000)
-        );
-        _grantRole(
-            DEFAULT_ADMIN_ROLE,
             address(0x00a329c0648769A73afAc7F9381E08FB43dBEA72)
         );
     }
@@ -135,9 +127,12 @@ contract TestPayoutFactory is PayoutFactory {
         return true;
     }
 
-    // This function acts as a sanity check that the PayoutFactory
-    // is generating new PaymentSplitter contracts. It should always fail
-    // function echidna_payout_length() public view returns(bool) {
+    /**
+    This function acts as a sanity check that the PayoutFactory
+    is generating new PaymentSplitter contracts. It should 
+    fail given a high number of iterations. 
+     */
+    // function echidna_payout_length() public view returns (bool) {
     //     return _payouts.length == 0;
     // }
 
