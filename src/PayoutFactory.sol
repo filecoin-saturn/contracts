@@ -172,8 +172,8 @@ contract PayoutFactory is AccessControl {
         uint256 claimable = splitter.releasable(account);
 
         if (claimable > 0) {
-            splitter.release(payable(account));
             emit PaymentReleased(account, claimable);
+            splitter.release(payable(account));
         }
     }
 }

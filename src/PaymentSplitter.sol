@@ -44,19 +44,19 @@ contract PaymentSplitter is Initializable {
      * All addresses in `payees` must be non-zero. Both arrays must have the same non-zero length, and there must be no
      * duplicates in `payees`.
      */
-    function initialize(address[] memory payees, uint256[] memory shares_)
+    function initialize(address[] memory payees_, uint256[] memory shares_)
         external
         payable
         initializer
     {
         require(
-            payees.length == shares_.length,
+            payees_.length == shares_.length,
             "PaymentSplitter: payees and shares length mismatch"
         );
-        require(payees.length > 0, "PaymentSplitter: no payees");
+        require(payees_.length > 0, "PaymentSplitter: no payees");
 
-        for (uint256 i = 0; i < payees.length; i++) {
-            _addPayee(payees[i], shares_[i]);
+        for (uint256 i = 0; i < payees_.length; i++) {
+            _addPayee(payees_[i], shares_[i]);
         }
     }
 
