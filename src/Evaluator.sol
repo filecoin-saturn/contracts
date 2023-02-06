@@ -127,6 +127,13 @@ contract Evaluator is AccessControl {
     }
 
     /**
+     * @dev Getter for the payees.
+     */
+    function payees() public view returns (address[] memory) {
+        return _payees;
+    }
+
+    /**
      * @dev Getter for the total shares held by payees.
      */
     function totalShares() public view returns (uint256) {
