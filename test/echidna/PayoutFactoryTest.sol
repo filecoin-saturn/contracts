@@ -43,8 +43,7 @@ contract TestPayoutFactory is PayoutFactory {
         view
         returns (bool)
     {
-        uint256 i;
-        for (; i < arr.length; ) {
+        for (uint256 i = 0; i < arr.length; i++) {
             PaymentSplitter splitter = PaymentSplitter(payable(arr[i]));
             address[] memory payees = splitter.payees();
             uint256 contractReleased = 0;
@@ -64,10 +63,6 @@ contract TestPayoutFactory is PayoutFactory {
             if (contractReleased > this.totalReleased()) {
                 return false;
             }
-
-            unchecked {
-                i++;
-            }
         }
         return true;
     }
@@ -77,8 +72,7 @@ contract TestPayoutFactory is PayoutFactory {
         view
         returns (bool)
     {
-        uint256 i;
-        for (; i < arr.length; ) {
+        for (uint256 i = 0; i < arr.length; i++) {
             PaymentSplitter splitter = PaymentSplitter(payable(arr[i]));
             address[] memory payees = splitter.payees();
             uint256 contractShares = 0;
@@ -88,7 +82,6 @@ contract TestPayoutFactory is PayoutFactory {
                 if (splitter.shares(payee) > splitter.totalShares()) {
                     return false;
                 }
-
                 unchecked {
                     j++;
                     contractShares += splitter.shares(payee);
@@ -97,10 +90,6 @@ contract TestPayoutFactory is PayoutFactory {
 
             if (contractShares > this.totalShares()) {
                 return false;
-            }
-
-            unchecked {
-                i++;
             }
         }
         return true;
@@ -133,22 +122,28 @@ contract TestPayoutFactory is PayoutFactory {
     fail given a high number of iterations. 
      */
     // function echidna_payout_length() public view returns (bool) {
-    //     return _payouts.length == 0;
+    //     address[] memory payouts = this.payouts();
+    //     return payouts.length == 0;
     // }
 
     function echidna_released_less_total() public view returns (bool) {
-        return contractReleaseLessThanTotal(_payouts);
+        address[] memory payouts = this.payouts();
+        return contractReleaseLessThanTotal(payouts);
     }
 
     function echidna_shares_less_total() public view returns (bool) {
-        return contractSharesLessThanTotal(_payouts);
+        address[] memory payouts = this.payouts();
+
+        return contractSharesLessThanTotal(payouts);
     }
 
     function echidna_contracts_have_payees() public view returns (bool) {
-        return eachContractHasPayees(_payouts);
+        address[] memory payouts = this.payouts();
+        return eachContractHasPayees(payouts);
     }
 
     function echidna_no_duplicate_splitters() public returns (bool) {
-        return hasNoDuplicates(_payouts);
+        address[] memory payouts = this.payouts();
+        return hasNoDuplicates(payouts);
     }
 }

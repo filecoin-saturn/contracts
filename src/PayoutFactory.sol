@@ -18,7 +18,7 @@ contract PayoutFactory is AccessControl {
     using Clones for address;
 
     // past payout contracts
-    address[] internal _payouts;
+    address[] private _payouts;
     // a dummy template for instantiating future splitting contracts
     address public immutable template = address(new PaymentSplitter());
 
@@ -74,13 +74,16 @@ contract PayoutFactory is AccessControl {
     }
 
     /**
+     * @dev Returns a list of all previously generated PaymentSplitter contract addresses.
+     */
+    function payouts() external view returns (address[] memory) {
+        return _payouts;
+    }
+
+    /**
      * @dev Returns the total shares over all previously generated payout contracts.
      */
-    function totalShares()
-        external
-        view
-        returns (uint256 totalValue)
-    {
+    function totalShares() external view returns (uint256 totalValue) {
         uint256 length = _payouts.length;
         for (uint256 i = 0; i < length; i++) {
             PaymentSplitter rewards = PaymentSplitter(payable(_payouts[i]));
@@ -88,22 +91,17 @@ contract PayoutFactory is AccessControl {
         }
     }
 
-     /**
+    /**
      * @dev Returns the total released funds over all previously generated payout contracts.
      */
-    function totalReleased()
-        external
-        view
-        returns (uint256 totalValue)
-    {
+    function totalReleased() external view returns (uint256 totalValue) {
         uint256 length = _payouts.length;
         for (uint256 i = 0; i < length; i++) {
             PaymentSplitter rewards = PaymentSplitter(payable(_payouts[i]));
             totalValue += rewards.totalReleased();
         }
     }
-    
-    
+
     /**
      * @dev Returns the total claimable amount over all previously generated payout contracts.
      * @param account The address of the payee.
@@ -151,6 +149,7 @@ contract PayoutFactory is AccessControl {
             totalValue += rewards.shares(account);
         }
     }
+
     /**
      * @dev Releases all available funds in previously generated payout contracts.
      * @param account The address of the payee.
