@@ -33,8 +33,8 @@ contract PaymentSplitter is Initializable {
     uint256 private _totalShares;
     uint256 private _totalReleased;
 
-    mapping(address => uint256) private _shares;
-    mapping(address => uint256) private _released;
+    mapping(address => uint256) internal _shares;
+    mapping(address => uint256) internal _released;
     address[] internal _payees;
 
     /**
@@ -85,6 +85,13 @@ contract PaymentSplitter is Initializable {
      */
     function totalReleased() public view returns (uint256) {
         return _totalReleased;
+    }
+
+    /**
+     * @dev Getter for the payees.
+     */
+    function payees() public view returns (address[] memory) {
+        return _payees;
     }
 
     /**

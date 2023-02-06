@@ -6,3 +6,6 @@ cache/*
 .shares
 broadcast/*
 crytic-export/*
+secrets/*
+echidna-corpus/*
+.vscode/*

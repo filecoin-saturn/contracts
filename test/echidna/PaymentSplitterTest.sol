@@ -24,8 +24,67 @@ contract TestPaymentSplitter is PaymentSplitter {
         return true;
     }
 
+    function payeeReleaseLessThanTotal(address[] memory arr)
+        private
+        view
+        returns (bool)
+    {
+        uint256 i;
+        for (; i < arr.length; ) {
+            if (released(arr[i]) > totalReleased()) {
+                return false;
+            }
+            unchecked {
+                i++;
+            }
+        }
+        return true;
+    }
+
+    function payeeSharesLessThanTotal(address[] memory arr)
+        private
+        view
+        returns (bool)
+    {
+        uint256 i;
+        for (; i < arr.length; ) {
+            if (shares(arr[i]) > totalShares()) {
+                return false;
+            }
+            unchecked {
+                i++;
+            }
+        }
+        return true;
+    }
+
+    function eachPayeeHasShare(
+        address[] memory payees,
+        mapping(address => uint256) storage sharesMap,
+        mapping(address => uint256) storage releasedMap
+    ) private view returns (bool) {
+        uint256 i;
+        for (; i < payees.length; ) {
+            if (releasedMap[payees[i]] == 0 && sharesMap[payees[i]] == 0) {
+                return false;
+            }
+            unchecked {
+                i++;
+            }
+        }
+        return true;
+    }
+
     function echidna_released_less_total() public view returns (bool) {
-        return totalReleased() <= totalShares();
+        return payeeReleaseLessThanTotal(_payees);
+    }
+
+    function echidna_shares_less_total() public view returns (bool) {
+        return payeeSharesLessThanTotal(_payees);
+    }
+
+    function echidna_payees_have_shares() public view returns (bool) {
+        return eachPayeeHasShare(_payees, _shares, _released);
     }
 
     function echidna_no_duplicate_payees() public returns (bool) {
