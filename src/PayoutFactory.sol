@@ -153,8 +153,7 @@ contract PayoutFactory is AccessControl {
     /**
      * @dev Releases all available funds in previously generated payout contracts.
      */
-    function releaseAll() external {
-        address payable account = payable(msg.sender);
+    function releaseAll(address payable account) external {
         uint256 length = _payouts.length;
         for (uint256 i = 0; i < length; i++) {
             _releasePayout(account, i);
