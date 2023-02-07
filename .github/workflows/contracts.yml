@@ -1,4 +1,4 @@
-name: Echidna Test
+name: Tests
 
 on:
   push:
@@ -29,13 +29,22 @@ jobs:
     - name: Install solc-select
       run: |
         pip3 install solc-select
+
     - name: Compile
       run: |
         forge build --build-info
         solc-select install 0.8.13    
         solc-select use 0.8.13
-    - name: Run tests
+
+    - name: Run forge tests
       run: forge test -vvv
+    
+     - name: Run Slither
+        uses: crytic/slither-action@v0.2.0
+        id: slither
+        with:
+          sarif: results.sarif
+          fail-on: none
 
     - name: Echidna Tests on PaymentSplitter
       uses: crytic/echidna-action@v2
@@ -46,6 +55,7 @@ jobs:
         files: test/echidna/PaymentSplitterTest.sol
         contract: TestPaymentSplitter
         crytic-args: --ignore-compile
+        
     - name: Echidna Tests on PayoutFactory
       uses: crytic/echidna-action@v2
       env:
