@@ -46,7 +46,7 @@ jobs:
         uses: crytic/slither-action@v0.2.0
         id: slither
         with:
-          sarif: results.sarif
+          target: "src/PayoutFactory.sol"
           fail-on: none
 
       - name: Echidna Tests on PaymentSplitter
