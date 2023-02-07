@@ -153,7 +153,7 @@ contract PayoutFactory is AccessControl {
     /**
      * @dev Releases all available funds in previously generated payout contracts.
      */
-    function releaseAll(address payable account) external {
+    function releaseAll(address account) external {
         uint256 length = _payouts.length;
         for (uint256 i = 0; i < length; i++) {
             _releasePayout(account, i);
@@ -165,7 +165,7 @@ contract PayoutFactory is AccessControl {
      * @param account The address of the payee.
      * @param index Index of the payout contract.
      */
-    function _releasePayout(address payable account, uint256 index) private {
+    function _releasePayout(address account, uint256 index) private {
         PaymentSplitter splitter = PaymentSplitter(payable(_payouts[index]));
         uint256 claimable = splitter.releasable(account);
 
