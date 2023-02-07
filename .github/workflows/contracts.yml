@@ -2,10 +2,10 @@ name: Tests
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
-  
+    branches: [main]
+
   workflow_dispatch:
 
 jobs:
@@ -13,55 +13,55 @@ jobs:
     name: Contract-Tests
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-      with:
-        submodules: recursive
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
 
-    - name: Install Foundry
-      uses: foundry-rs/foundry-toolchain@v1
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10' 
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
 
-    - name: Install solc-select
-      run: |
-        pip3 install solc-select
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
 
-    - name: Compile
-      run: |
-        forge build --build-info
-        solc-select install 0.8.13    
-        solc-select use 0.8.13
+      - name: Install solc-select
+        run: |
+          pip3 install solc-select
 
-    - name: Run forge tests
-      run: forge test -vvv
-    
-     - name: Run Slither
+      - name: Compile
+        run: |
+          forge build --build-info
+          solc-select install 0.8.16    
+          solc-select use 0.8.16
+
+      - name: Run forge tests
+        run: forge test -vvv
+
+      - name: Run Slither
         uses: crytic/slither-action@v0.2.0
         id: slither
         with:
           sarif: results.sarif
           fail-on: none
 
-    - name: Echidna Tests on PaymentSplitter
-      uses: crytic/echidna-action@v2
-      env:
-        SOLC_VERSION: 0.8.13   
-      with:
-        solc-version: 0.8.13
-        files: test/echidna/PaymentSplitterTest.sol
-        contract: TestPaymentSplitter
-        crytic-args: --ignore-compile
-        
-    - name: Echidna Tests on PayoutFactory
-      uses: crytic/echidna-action@v2
-      env:
-        SOLC_VERSION: 0.8.13   
-      with:
-        solc-version: 0.8.13
-        files: test/echidna/PayoutFactoryTest.sol
-        contract: TestPayoutFactory
-        crytic-args: --ignore-compile
+      - name: Echidna Tests on PaymentSplitter
+        uses: crytic/echidna-action@v2
+        env:
+          SOLC_VERSION: 0.8.16
+        with:
+          solc-version: 0.8.16
+          files: test/echidna/PaymentSplitterTest.sol
+          contract: TestPaymentSplitter
+          crytic-args: --ignore-compile
+
+      - name: Echidna Tests on PayoutFactory
+        uses: crytic/echidna-action@v2
+        env:
+          SOLC_VERSION: 0.8.16
+        with:
+          solc-version: 0.8.16
+          files: test/echidna/PayoutFactoryTest.sol
+          contract: TestPayoutFactory
+          crytic-args: --ignore-compile
