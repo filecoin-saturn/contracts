@@ -39,6 +39,9 @@ jobs:
       - name: Run forge tests
         run: forge test -vvv
 
+      - name: Patch foundry
+        run: rm foundry.toml
+
       - name: Run Slither
         uses: crytic/slither-action@v0.2.0
         id: slither
