@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.2;
+pragma solidity ^0.8.16;
 
 import "../lib/openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 
@@ -44,19 +44,19 @@ contract PaymentSplitter is Initializable {
      * All addresses in `payees` must be non-zero. Both arrays must have the same non-zero length, and there must be no
      * duplicates in `payees`.
      */
-    function initialize(address[] memory payees, uint256[] memory shares_)
+    function initialize(address[] memory payees_, uint256[] memory shares_)
         external
         payable
         initializer
     {
         require(
-            payees.length == shares_.length,
+            payees_.length == shares_.length,
             "PaymentSplitter: payees and shares length mismatch"
         );
-        require(payees.length > 0, "PaymentSplitter: no payees");
+        require(payees_.length > 0, "PaymentSplitter: no payees");
 
-        for (uint256 i = 0; i < payees.length; i++) {
-            _addPayee(payees[i], shares_[i]);
+        for (uint256 i = 0; i < payees_.length; i++) {
+            _addPayee(payees_[i], shares_[i]);
         }
     }
 
@@ -127,7 +127,7 @@ contract PaymentSplitter is Initializable {
      * @dev Triggers a transfer to `account` of the amount of FIL they are owed, according to their percentage of the
      * total shares and their previous withdrawals.
      */
-    function release(address payable account) public virtual {
+    function release(address account) public virtual {
         require(_shares[account] > 0, "PaymentSplitter: account has no shares");
 
         uint256 payment = releasable(account);
@@ -141,8 +141,10 @@ contract PaymentSplitter is Initializable {
             _released[account] += payment;
         }
         emit PaymentReleased(account, payment);
-        bool sent = account.send(payment);
-        require(sent, "PaymentSplitter: Failed to send FIL");
+        require(
+            payable(account).send(payment),
+            "PaymentSplitter: Failed to send FIL"
+        ); // silences the unchecked return value complaint
     }
 
     /**

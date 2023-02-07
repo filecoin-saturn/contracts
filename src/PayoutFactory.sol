@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.2;
+pragma solidity ^0.8.16;
 
 import "./PaymentSplitter.sol";
 import "../lib/openzeppelin-contracts/contracts/proxy/Clones.sol";
@@ -152,7 +152,6 @@ contract PayoutFactory is AccessControl {
 
     /**
      * @dev Releases all available funds in previously generated payout contracts.
-     * @param account The address of the payee.
      */
     function releaseAll(address account) external {
         uint256 length = _payouts.length;
@@ -167,11 +166,12 @@ contract PayoutFactory is AccessControl {
      * @param index Index of the payout contract.
      */
     function _releasePayout(address account, uint256 index) private {
-        uint256 claimable = PaymentSplitter(payable(_payouts[index]))
-            .releasable(account);
+        PaymentSplitter splitter = PaymentSplitter(payable(_payouts[index]));
+        uint256 claimable = splitter.releasable(account);
+
         if (claimable > 0) {
             emit PaymentReleased(account, claimable);
-            PaymentSplitter(payable(_payouts[index])).release(payable(account));
+            splitter.release(account);
         }
     }
 }
