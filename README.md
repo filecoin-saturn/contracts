@@ -89,8 +89,6 @@ We recommend installing `foundry` from source:
 ```bash
 git clone https://github.com/foundry-rs/foundry
 cd foundry
-# (for compatibility with filecoin receipts during deploy)
-git checkout e840894
 # install cast + forge
 cargo install --path ./cli --profile local --bins --locked --force
 # install anvil

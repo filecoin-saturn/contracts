@@ -171,7 +171,7 @@ contract PayoutFactory is AccessControl {
 
         if (claimable > 0) {
             emit PaymentReleased(account, claimable);
-            splitter.release(payable(account));
+            splitter.release(account);
         }
     }
 }
