@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.2;
+pragma solidity ^0.8.16;
 
 import "../lib/openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 
@@ -120,7 +120,7 @@ contract PaymentSplitter is Initializable {
      * @dev Triggers a transfer to `account` of the amount of FIL they are owed, according to their percentage of the
      * total shares and their previous withdrawals.
      */
-    function release(address payable account) public virtual {
+    function release(address account) public virtual {
         require(_shares[account] > 0, "PaymentSplitter: account has no shares");
 
         uint256 payment = releasable(account);
@@ -134,8 +134,10 @@ contract PaymentSplitter is Initializable {
             _released[account] += payment;
         }
         emit PaymentReleased(account, payment);
-        bool sent = account.send(payment);
-        require(sent, "PaymentSplitter: Failed to send FIL");
+        require(
+            payable(account).send(payment),
+            "PaymentSplitter: Failed to send FIL"
+        ); // silences the unchecked return value complaint
     }
 
     /**
