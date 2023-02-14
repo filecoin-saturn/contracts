@@ -78,18 +78,8 @@ function releaseAll(address account) external {...}
 function _releasePayout(address account, uint256 index) private {...}
 ```
 
-> TODO: currently new payouts are instantiated by passing `(address[] memory payees, uint256[] memory shares_)` to the `payout` function. Ideally we'd like to move to a model where these values are tallied up progressively as time goes on, perhaps using `rewardPayee` or `penalizePayee` or `banPayee` functions, all of which would give users insight into the expected payout for the _current epoch_ before a payout is generated. This could be done on a separate `Evaluator` contract which calls `PayoutFactory` at regular epochs. Example function:
+The third contract, is a simple evaluator which keeps track of how much each payee is owed in a given evaluation period. For now this value can only be _incremented_ by way of `rewardPayee`. This contract is also bundled with a  `PayoutFactory` upon construction. The evaluator contract is the admin of the factory which enables it to generate new payouts at the end of a given evaluation period. It uses an internal mapping (`mapping(uint256 => mapping(address => uint256)) private _shares`) as values for the payout. Whereby this mapping is reset after the call. )
 
-```solidity 
-/**
-* @dev Reward a payee.
-* @param account The address of the payee.
-* @param shares_ The number of shares owned by the payee.
-*/
-function rewardPayee(address account, uint256 shares_)
-	external
-	onlyRole(DEFAULT_ADMIN_ROLE) {...}
-```
     
 
 ## How to 
@@ -99,8 +89,6 @@ We recommend installing `foundry` from source:
 ```bash
 git clone https://github.com/foundry-rs/foundry
 cd foundry
-# (for compatibility with filecoin receipts during deploy)
-git checkout e840894
 # install cast + forge
 cargo install --path ./cli --profile local --bins --locked --force
 # install anvil
@@ -128,8 +116,10 @@ echidna-test test/echidna/PaymentSplitterTest.sol --contract TestPaymentSplitter
 
 ### Deployment
 
+> TODO: Implement a deployment script for the evaluator contract.
 
-To deploy the contracts to the hyperspace testnet you need to create a list of payees in a `.payees`. This is a new line delineated list of address we want to send payouts to. For instance: 
+
+To deploy a Factory contract to the hyperspace testnet you need to create a list of payees in a `.payees`. This is a new line delineated list of address we want to send payouts to. For instance: 
 ```bash
 0x1FE76102978Dbb20566BA59E29e6256715a7de4d
 0xd3043090211ebd3dabc74d0eb9cc468e1dfbb700

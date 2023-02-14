@@ -33,9 +33,9 @@ contract PaymentSplitter is Initializable {
     uint256 private _totalShares;
     uint256 private _totalReleased;
 
-    mapping(address => uint256) internal _shares;
-    mapping(address => uint256) internal _released;
-    address[] internal _payees;
+    mapping(address => uint256) private _shares;
+    mapping(address => uint256) private _released;
+    address[] private _payees;
 
     /**
      * @dev Creates an instance of `PaymentSplitter` where each account in `payees` is assigned the number of shares at
@@ -106,13 +106,6 @@ contract PaymentSplitter is Initializable {
      */
     function released(address account) public view returns (uint256) {
         return _released[account];
-    }
-
-    /**
-     * @dev Getter for the address of the payee number `index`.
-     */
-    function payee(uint256 index) public view returns (address) {
-        return _payees[index];
     }
 
     /**
