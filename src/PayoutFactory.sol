@@ -103,6 +103,38 @@ contract PayoutFactory is AccessControl {
     }
 
     /**
+     * @dev Returns the total claimable amount for an account
+            over all previously generated payout contracts.
+     * @param account Address of the payee.  
+     */
+    function releasablePerContract(address account)
+        external
+        view
+        returns (
+            address[] memory,
+            uint256[] memory,
+            uint256[] memory
+        )
+    {
+        uint256 length = _payouts.length;
+        address[] memory contracts = new address[](length);
+        uint256[] memory releasableFunds = new uint256[](length);
+        uint256[] memory releasedFunds = new uint256[](length);
+
+        for (uint256 i = 0; i < length; i++) {
+            PaymentSplitter rewards = PaymentSplitter(payable(_payouts[i]));
+            uint256 payeeShares = rewards.shares(account);
+
+            if (payeeShares > 0) {
+                contracts[i] = _payouts[i];
+                releasableFunds[i] = rewards.releasable(account);
+                releasedFunds[i] = rewards.released(account);
+            }
+        }
+        return (contracts, releasableFunds, releasedFunds);
+    }
+
+    /**
      * @dev Returns the total claimable amount over all previously generated payout contracts.
      * @param account The address of the payee.
      */
@@ -157,6 +189,29 @@ contract PayoutFactory is AccessControl {
         uint256 length = _payouts.length;
         for (uint256 i = 0; i < length; i++) {
             _releasePayout(account, i);
+        }
+    }
+
+    /**
+     * @dev Releases all available funds in selected generated payout contracts.
+     * @param account The address of the payee.
+     * @param selectPayouts List of selected PaymentSplitter addresses.
+     */
+    function releaseSelect(address account, address[] memory selectPayouts)
+        external
+    {
+        uint256 length = selectPayouts.length;
+        for (uint256 i = 0; i < length; i++) {
+            address paymentSplitterAddress = selectPayouts[i];
+            uint256 claimable = PaymentSplitter(payable(paymentSplitterAddress))
+                .releasable(account);
+
+            if (claimable > 0) {
+                emit PaymentReleased(account, claimable);
+                PaymentSplitter(payable(paymentSplitterAddress)).release(
+                    payable(account)
+                );
+            }
         }
     }
 
