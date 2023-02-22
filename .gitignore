@@ -9,3 +9,4 @@ crytic-export/*
 secrets/*
 echidna-corpus/*
 .vscode/*
+**/**/target
