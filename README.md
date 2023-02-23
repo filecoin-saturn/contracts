@@ -161,3 +161,15 @@ This command will return the testnet address, which you can check out on an [exp
 ```bash
 cast send ${CONTRACT_ADDRESS} "release(address)" ${ADDRESS_TO_PAY}  --rpc-url ${HYPERSPACE_RPC_URL} --private-key=${HYPERSPACE_PRIVKEY} 
 ```
+
+
+### Bindings
+
+Foundry generates bindings for solidity contracts that allow for programmatic interactions with the generated contracts through Rust. This comes in handy for writing deployment scripts, gas estimation, etc. 
+
+To generate the bindings we use the `forge bind` commmand and select desired contracts as follows:
+
+```bash
+forge bind  --select "(?:^|\W)PayoutFactory|PaymentSplitter(?:$|\W)" --crate-name contract-bindings -b ./contract-scripts/bindings
+```
+
