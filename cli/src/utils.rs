@@ -14,7 +14,7 @@ use ethers::{
 use eyre::Result;
 use serde_json::ser;
 use std::fs;
-use log::info;
+use log::{debug, info};
 
 
 const DEFAULT_DERIVATION_PATH_PREFIX: &str = "m/44'/60'/0'/0/";
@@ -83,7 +83,7 @@ pub async fn get_signing_provider(
 ) -> SignerMiddleware<Arc<Provider<Http>>, Wallet<SigningKey>> {
     let provider =
         Provider::<Http>::try_from(rpc_url).expect("could not instantiate HTTP Provider");
-    info!("{:#?}", provider);
+    debug!("{:#?}", provider);
     // provider.for_chain(Chain::try_from(3141));
     let chain_id = provider.get_chainid().await.unwrap();
     let private_key = derive_key(mnemonic, DEFAULT_DERIVATION_PATH_PREFIX, 0).unwrap();
