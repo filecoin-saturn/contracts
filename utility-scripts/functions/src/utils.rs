@@ -1,5 +1,4 @@
 use std::sync::Arc;
-
 use ::ethers::contract::Contract;
 use ethers::abi::AbiEncode;
 use ethers::core::k256::{ecdsa::SigningKey, elliptic_curve::sec1::ToEncodedPoint, PublicKey};
@@ -15,6 +14,8 @@ use ethers::{
 use eyre::Result;
 use serde_json::ser;
 use std::fs;
+use log::info;
+
 
 const DEFAULT_DERIVATION_PATH_PREFIX: &str = "m/44'/60'/0'/0/";
 
@@ -32,11 +33,11 @@ fn derive_key(mnemonic: &str, path: &str, index: u32) -> Result<U256, Bytes> {
         .build()
         .map_err(|err| err.to_string().encode())?;
 
-    println!("Wallet key we use: {:#?}", wallet);
+    info!("Wallet key we use: {:#?}", wallet);
 
     let private_key = U256::from_big_endian(wallet.signer().to_bytes().as_slice());
 
-    println!("Private key we use: {:#?}", private_key);
+    info!("Private key we use: {:#?}", private_key);
 
     Ok(private_key)
 }
@@ -62,8 +63,8 @@ fn secret_key_to_address(secret_key: &SigningKey) -> Address {
     Address::from(bytes)
 }
 
-pub fn addr(mnemonic: &String) -> Result<H160, Bytes> {
-    let private_key = derive_key(&mnemonic, DEFAULT_DERIVATION_PATH_PREFIX, 0).unwrap();
+pub fn addr(mnemonic: &str) -> Result<H160, Bytes> {
+    let private_key = derive_key(mnemonic, DEFAULT_DERIVATION_PATH_PREFIX, 0).unwrap();
     let key = parse_private_key(private_key)?;
     let addr = secret_key_to_address(&key);
     Ok(addr)
@@ -72,25 +73,25 @@ pub fn addr(mnemonic: &String) -> Result<H160, Bytes> {
 fn get_signing_wallet(private_key: U256, chain_id: u64) -> Wallet<SigningKey> {
     let private_key = parse_private_key(private_key).unwrap();
     let wallet: Wallet<ethers::core::k256::ecdsa::SigningKey> = private_key.into();
-    let wallet = wallet.with_chain_id(chain_id);
-    wallet
+    
+    wallet.with_chain_id(chain_id)
 }
 
 pub async fn get_signing_provider(
-    mnemonic: &String,
+    mnemonic: &str,
     rpc_url: &str,
 ) -> SignerMiddleware<Arc<Provider<Http>>, Wallet<SigningKey>> {
     let provider =
         Provider::<Http>::try_from(rpc_url).expect("could not instantiate HTTP Provider");
-    println!("{:#?}", provider);
+    info!("{:#?}", provider);
     // provider.for_chain(Chain::try_from(3141));
     let chain_id = provider.get_chainid().await.unwrap();
-    let private_key = derive_key(&mnemonic, DEFAULT_DERIVATION_PATH_PREFIX, 0).unwrap();
+    let private_key = derive_key(mnemonic, DEFAULT_DERIVATION_PATH_PREFIX, 0).unwrap();
     let signing_wallet = get_signing_wallet(private_key, chain_id.as_u64());
 
     let provider = Arc::new(provider);
-    let client = SignerMiddleware::new(provider, signing_wallet);
-    client
+    
+    SignerMiddleware::new(provider, signing_wallet)
 }
 
 pub fn write_abi(contract: Contract<SignerMiddleware<Arc<Provider<Http>>, Wallet<SigningKey>>>) {
@@ -98,3 +99,23 @@ pub fn write_abi(contract: Contract<SignerMiddleware<Arc<Provider<Http>>, Wallet
     let string_abi = ser::to_string(abi).unwrap();
     fs::write("./factoryAbi.json", string_abi).expect("Unable to write file");
 }
+
+pub fn banner() {
+    info!(
+        "{}",
+        format!(
+            "
+            _|_|_|              _|                                    
+            _|          _|_|_|  _|_|_|_|  _|    _|  _|  _|_|  _|_|_|    
+              _|_|    _|    _|    _|      _|    _|  _|_|      _|    _|  
+                  _|  _|    _|    _|      _|    _|  _|        _|    _|  
+            _|_|_|      _|_|_|      _|_|    _|_|_|  _|        _|    _|      
+
+        -----------------------------------------------------------
+        Saturn smart contracts 🪐.
+        -----------------------------------------------------------
+        "
+        )
+    );
+}
+

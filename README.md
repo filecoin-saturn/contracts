@@ -170,6 +170,13 @@ Foundry generates bindings for solidity contracts that allow for programmatic in
 To generate the bindings we use the `forge bind` commmand and select desired contracts as follows:
 
 ```bash
-forge bind  --select "(?:^|\W)PayoutFactory|PaymentSplitter(?:$|\W)" --crate-name contract-bindings -b ./contract-scripts/bindings
+forge bind  --select "(?:^|\W)PayoutFactory|PaymentSplitter(?:$|\W)" --crate-name contract-bindings -b ./utility-scripts/bindings
 ```
 
+To use the bindings as scripts to deploy and interact with contracts first create a `./secrets/secret` file within `./utility-scripts` containing your mnemonic string (not this should only be used for testing purposes !). 
+Then: 
+```bash
+cd ./utility-scripts
+cargo run
+
+```
