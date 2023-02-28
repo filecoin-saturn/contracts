@@ -43,16 +43,12 @@ impl Cli {
                 let addr: Address = addr(&mnemonic).unwrap();
                 let mut contract = PayoutFactory::deploy(client.clone().into(), addr).unwrap();
 
-                // let gas1 = client.get_gas_price().await.unwrap();
                 let gas = client.provider().get_gas_price().await.unwrap();
                 println!("Gas Price {:#?}", gas);
-                // let gas_limit = gas * GAS_LIMIT_MULTIPLIER / 100;
 
                 let tx = contract.deployer.tx.clone();
                 let gas_estimate =
                     client.estimate_gas(&tx, None).await.unwrap() * GAS_LIMIT_MULTIPLIER / 100;
-                // let deployer = deployer.gas_price(gas);
-                // let deployer = deployer.gas(gas_estimate);
                 contract.deployer.tx.set_gas(gas_estimate);
                 contract.deployer.tx.set_gas_price(gas);
 
@@ -64,15 +60,15 @@ impl Cli {
                 let deploy_transaction = contract.send().await.unwrap();
                 println!("Deploy Receipt: {:#?}", deploy_transaction)
             }
-            Commands::AddPayments {
+            Commands::NewPayout {
                 secret,
                 rpc_url,
-                factory_addresss,
+                factory_addr,
                 payout_csv,
             } => {
                 let mnemonic = read_to_string(secret).unwrap();
                 let client = get_signing_provider(&mnemonic, &rpc_url).await;
-                let addr = Address::from_str(factory_addresss.as_str()).unwrap();
+                let addr = Address::from_str(factory_addr.as_str()).unwrap();
 
                 let mut reader = csv::Reader::from_path(payout_csv).unwrap();
                 let mut shares: Vec<U256> = Vec::new();
@@ -87,17 +83,12 @@ impl Cli {
 
                 let factory = PayoutFactory::new(addr, client.clone().into());
                 let mut payout_tx = factory.payout(payees, shares);
-                // let gas1 = client.get_gas_price().await.unwrap();
-
                 let gas = client.provider().get_gas_price().await.unwrap();
                 println!("Gas Price {:#?}", gas);
-                // let gas_limit = gas * GAS_LIMIT_MULTIPLIER / 100;
 
                 let gas_estimate = client.estimate_gas(&payout_tx.tx, None).await.unwrap()
                     * GAS_LIMIT_MULTIPLIER
                     / 100;
-                // let mut payout_tx = payout_tx.gas(gas);
-                // let mut payout_tx = payout_tx.gas_price(gas_estimate);
                 payout_tx.tx.set_gas_price(gas);
                 payout_tx.tx.set_gas(gas_estimate);
 
@@ -122,7 +113,7 @@ pub enum Commands {
         rpc_url: String,
     },
     #[command(arg_required_else_help = true)]
-    AddPayments {
+    NewPayout {
         /// Path to the wallet mnemonic
         #[arg(short = 'S', long)]
         secret: PathBuf,
@@ -131,7 +122,7 @@ pub enum Commands {
         rpc_url: String,
         /// Path to the wallet mnemonic
         #[arg(short = 'F', long)]
-        factory_addresss: String,
+        factory_addr: String,
         // Path to csv payout file.
         #[arg(short = 'P', long)]
         payout_csv: PathBuf,
