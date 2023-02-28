@@ -10,3 +10,4 @@ secrets/*
 echidna-corpus/*
 .vscode/*
 **/**/target
+**/**/secrets
