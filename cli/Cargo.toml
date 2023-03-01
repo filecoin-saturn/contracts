@@ -13,6 +13,4 @@ serde_json = "1.0.91"
 serde = "1.0.152"
 log = { version = "0.4.17" }
 colog = { version = "1.1.0" }
-
-
-
+csv = "1.2.0"
