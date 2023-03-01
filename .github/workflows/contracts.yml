@@ -5,7 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-
+    paths: ['src/**', 'test/**/**']
   workflow_dispatch:
 
 jobs:
@@ -33,7 +33,7 @@ jobs:
       - name: Compile
         run: |
           forge build --build-info
-          solc-select install 0.8.16    
+          solc-select install 0.8.16
           solc-select use 0.8.16
 
       - name: Run forge tests
@@ -68,11 +68,11 @@ jobs:
           files: test/echidna/PayoutFactoryTest.sol
           contract: TestPayoutFactory
           crytic-args: --ignore-compile
-      
+
       - name: Echidna Tests on Evaluator
         uses: crytic/echidna-action@v2
         env:
-          SOLC_VERSION: 0.8.16   
+          SOLC_VERSION: 0.8.16
         with:
           solc-version: 0.8.16
           files: test/echidna/EvaluatorTest.sol
