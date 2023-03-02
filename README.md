@@ -189,5 +189,5 @@ To deploy a new `PaymentSplitter` from a deployed `PayoutFactory` contract:
 Run:
 ```bash
 cd ./cli
-cargo run --bin saturn-contracts add-payments  -S ./secrets/.secret -U $RPC_URL -F $FACTORY_ADDRESS -P ./secrets/payouts.csv
+cargo run --bin saturn-contracts new-payout  -S ./secrets/.secret -U $RPC_URL -F $FACTORY_ADDRESS -P ./secrets/payouts.csv
 ```
