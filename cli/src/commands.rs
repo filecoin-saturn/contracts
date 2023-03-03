@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use contract_bindings::payout_factory::PayoutFactory;
 use ethers::abi::Address;
 use ethers::prelude::Middleware;
-use ethers::types::U256;
+use ethers::types::{H256, U256};
 use log::{debug, error, info};
 use serde::{Deserialize, Serialize};
 use std::fs::read_to_string;
@@ -17,9 +17,11 @@ const ATTO_FIL: u128 = 10_u128.pow(18);
 #[derive(Error, Debug)]
 pub enum CLIError {
     #[error(
-        "did not receive receipt, but check a hyperspace explorer to check if call was successful"
+        "did not receive receipt, but check a hyperspace explorer to check if tx was successful (hash: ${0})"
     )]
-    NoReceipt,
+    NoReceipt(H256),
+    #[error("contract failed to deploy")]
+    ContractNotDeployed,
 }
 
 #[allow(missing_docs)]
@@ -44,7 +46,11 @@ impl Cli {
 
     pub async fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
         match &self.command {
-            Commands::Deploy { secret, rpc_url } => {
+            Commands::Deploy {
+                secret,
+                rpc_url,
+                retries,
+            } => {
                 let mnemonic = read_to_string(secret)?;
                 let client = get_signing_provider(&mnemonic, &rpc_url).await;
                 let addr: Address = addr(&mnemonic).unwrap();
@@ -64,13 +70,22 @@ impl Cli {
                     "estimated deployment gas cost {:#?}",
                     client.estimate_gas(&tx, None).await?
                 );
-                let result = contract.send_with_receipt().await;
-                match result {
-                    Ok((contract, deploy_receipt)) => {
-                        debug!("deploy receipt: {:#?}", deploy_receipt);
-                        info!("contract address: {:#?}", contract.address());
-                    }
-                    Err(_e) => return Err(Box::new(CLIError::NoReceipt)),
+
+                let deployer = contract.deployer;
+                let pending_tx = client.send_transaction(deployer.tx, None).await?;
+
+                let hash = pending_tx.tx_hash();
+                info!("using {} retries", retries);
+                let receipt = pending_tx.retries(*retries).await?;
+                if receipt.is_some() {
+                    let receipt = receipt.unwrap();
+                    debug!("call receipt: {:#?}", receipt);
+                    let address = receipt
+                        .contract_address
+                        .ok_or(CLIError::ContractNotDeployed)?;
+                    info!("contract address: {:#?}", address);
+                } else {
+                    return Err(Box::new(CLIError::NoReceipt(hash)));
                 }
             }
             Commands::NewPayout {
@@ -78,6 +93,7 @@ impl Cli {
                 rpc_url,
                 factory_addr,
                 payout_csv,
+                retries,
             } => {
                 let mnemonic = read_to_string(secret)?;
                 let client = get_signing_provider(&mnemonic, &rpc_url).await;
@@ -104,11 +120,14 @@ impl Cli {
                 payout_tx.tx.set_gas_price(gas);
                 payout_tx.tx.set_gas(gas_estimate);
 
-                let transaction = payout_tx.send().await?.await?;
-                if transaction.is_some() {
-                    debug!("call receipt: {:#?}", transaction);
+                let pending_tx = payout_tx.send().await?;
+                let hash = pending_tx.tx_hash();
+                info!("using {} retries", retries);
+                let receipt = pending_tx.retries(*retries).await?;
+                if receipt.is_some() {
+                    debug!("call receipt: {:#?}", receipt.unwrap());
                 } else {
-                    return Err(Box::new(CLIError::NoReceipt));
+                    return Err(Box::new(CLIError::NoReceipt(hash)));
                 }
             }
         }
@@ -128,6 +147,9 @@ pub enum Commands {
         /// RPC Url
         #[arg(short = 'U', long)]
         rpc_url: String,
+        // Num of retries when attempting to make a transaction.
+        #[arg(long, default_value = "10")]
+        retries: usize,
     },
     #[command(arg_required_else_help = true)]
     NewPayout {
@@ -143,5 +165,8 @@ pub enum Commands {
         // Path to csv payout file.
         #[arg(short = 'P', long)]
         payout_csv: PathBuf,
+        // Num of retries when attempting to make a transaction.
+        #[arg(long, default_value = "10")]
+        retries: usize,
     },
 }
