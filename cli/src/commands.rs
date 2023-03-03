@@ -57,8 +57,8 @@ impl Cli {
                     "Estimated deployment gas cost {:#?}",
                     client.estimate_gas(&tx, None).await.unwrap()
                 );
-                let deploy_result = contract.call().await.unwrap();
-                debug!("deploy result: {:#?}", deploy_result)
+                let deploy_transaction = contract.send().await.unwrap();
+                debug!("Deploy Receipt: {:#?}", deploy_transaction)
             }
             Commands::NewPayout {
                 secret,
