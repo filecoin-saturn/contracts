@@ -5,7 +5,7 @@ use ethers::abi::Address;
 use ethers::prelude::Middleware;
 use ethers::types::U256;
 use eyre::Result;
-use log::info;
+use log::{info, debug};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fs::read_to_string;
@@ -44,7 +44,7 @@ impl Cli {
                 let mut contract = PayoutFactory::deploy(client.clone().into(), addr).unwrap();
 
                 let gas = client.provider().get_gas_price().await.unwrap();
-                println!("Gas Price {:#?}", gas);
+                info!("gas price {:#?}: ", gas);
 
                 let tx = contract.deployer.tx.clone();
                 let gas_estimate =
@@ -52,13 +52,13 @@ impl Cli {
                 contract.deployer.tx.set_gas(gas_estimate);
                 contract.deployer.tx.set_gas_price(gas);
 
-                println!("{:#?}", tx);
+                debug!("{:#?}", tx);
                 info!(
                     "Estimated deployment gas cost {:#?}",
                     client.estimate_gas(&tx, None).await.unwrap()
                 );
                 let deploy_transaction = contract.send().await.unwrap();
-                println!("Deploy Receipt: {:#?}", deploy_transaction)
+                debug!("Deploy Receipt: {:#?}", deploy_transaction)
             }
             Commands::NewPayout {
                 secret,
@@ -84,7 +84,7 @@ impl Cli {
                 let factory = PayoutFactory::new(addr, client.clone().into());
                 let mut payout_tx = factory.payout(payees, shares);
                 let gas = client.provider().get_gas_price().await.unwrap();
-                println!("Gas Price {:#?}", gas);
+                info!("gas price {:#?}: ", gas);
 
                 let gas_estimate = client.estimate_gas(&payout_tx.tx, None).await.unwrap()
                     * GAS_LIMIT_MULTIPLIER
@@ -92,8 +92,9 @@ impl Cli {
                 payout_tx.tx.set_gas_price(gas);
                 payout_tx.tx.set_gas(gas_estimate);
 
-                let pendind_tx = payout_tx.send().await;
-                println!("Transaction {:#?}", pendind_tx);
+                let result = payout_tx.call().await;
+
+                info!("result {:#?}: ", result);
             }
         }
     }
