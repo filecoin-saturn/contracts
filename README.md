@@ -176,12 +176,15 @@ forge bind  --select "(?:^|\W)PayoutFactory|PaymentSplitter(?:$|\W)" --crate-nam
 ## Cli
 
 To use the bindings as scripts to deploy and interact with contracts first create a `./secrets/secret` file within `./cli` containing your mnemonic string (not this should only be used for testing purposes !).
-Then:
+
 ```bash
 cd ./cli
-cargo run --bin saturn-contracts deploy -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1
+cargo run --bin saturn-contracts deploy -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10
 
 ```
+
+> **Note:** The `--retries` parameter sets a number of times to poll a pending transaction before considering it as having failed. Because of the differences in block times between Filecoin / Hyperspace and Ethereum, `ethers-rs` can sometimes timeout prematurely _before_ a transaction has truly failed or succeeded (`ethers-rs` has been built with Ethereum in mind). `--retries` has a default value of 10, which empirically we have found to result in successful transactions.
+
 To deploy a new `PaymentSplitter` from a deployed `PayoutFactory` contract:
 - Set an env var called `FACTORY_ADDRESS` with the address of the deployed `PayoutFactory`.
 - Generate a csv file with the headers `payee,shares` and fill out the rows with pairs of addresses and shares.
@@ -189,5 +192,6 @@ To deploy a new `PaymentSplitter` from a deployed `PayoutFactory` contract:
 Run:
 ```bash
 cd ./cli
-cargo run --bin saturn-contracts new-payout  -S ./secrets/.secret -U $RPC_URL -F $FACTORY_ADDRESS -P ./secrets/payouts.csv
+cargo run --bin saturn-contracts new-payout  -S ./secrets/.secret -U $RPC_URL -F $FACTORY_ADDRESS -P ./secrets/payouts.csv --retries=10
 ```
+

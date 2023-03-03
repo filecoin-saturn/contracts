@@ -3,17 +3,26 @@ use clap::{Parser, Subcommand};
 use contract_bindings::payout_factory::PayoutFactory;
 use ethers::abi::Address;
 use ethers::prelude::Middleware;
-use ethers::types::U256;
-use eyre::Result;
-use log::info;
+use ethers::types::{H256, U256};
+use log::{debug, error, info};
 use serde::{Deserialize, Serialize};
-use std::error::Error;
 use std::fs::read_to_string;
 use std::path::PathBuf;
 use std::str::FromStr;
+use thiserror::Error;
 
 const GAS_LIMIT_MULTIPLIER: i32 = 130;
 const ATTO_FIL: u128 = 10_u128.pow(18);
+
+#[derive(Error, Debug)]
+pub enum CLIError {
+    #[error(
+        "did not receive receipt, but check a hyperspace explorer to check if tx was successful (hash: ${0})"
+    )]
+    NoReceipt(H256),
+    #[error("contract failed to deploy")]
+    ContractNotDeployed,
+}
 
 #[allow(missing_docs)]
 #[derive(Parser, Debug, Clone, Deserialize, Serialize)]
@@ -31,51 +40,71 @@ struct Payment {
 }
 impl Cli {
     /// Create a configuration
-    pub fn create() -> Result<Self, Box<dyn Error>> {
+    pub fn create() -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Cli::parse())
     }
 
-    pub async fn run(&self) {
+    pub async fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
         match &self.command {
-            Commands::Deploy { secret, rpc_url } => {
-                let mnemonic = read_to_string(secret).unwrap();
+            Commands::Deploy {
+                secret,
+                rpc_url,
+                retries,
+            } => {
+                let mnemonic = read_to_string(secret)?;
                 let client = get_signing_provider(&mnemonic, &rpc_url).await;
                 let addr: Address = addr(&mnemonic).unwrap();
-                let mut contract = PayoutFactory::deploy(client.clone().into(), addr).unwrap();
+                let mut contract = PayoutFactory::deploy(client.clone().into(), addr)?;
 
-                let gas = client.provider().get_gas_price().await.unwrap();
-                println!("Gas Price {:#?}", gas);
+                let gas = client.provider().get_gas_price().await?;
+                info!("gas price {:#?}: ", gas);
 
                 let tx = contract.deployer.tx.clone();
                 let gas_estimate =
-                    client.estimate_gas(&tx, None).await.unwrap() * GAS_LIMIT_MULTIPLIER / 100;
+                    client.estimate_gas(&tx, None).await? * GAS_LIMIT_MULTIPLIER / 100;
                 contract.deployer.tx.set_gas(gas_estimate);
                 contract.deployer.tx.set_gas_price(gas);
 
-                println!("{:#?}", tx);
+                debug!("{:#?}", tx);
                 info!(
-                    "Estimated deployment gas cost {:#?}",
-                    client.estimate_gas(&tx, None).await.unwrap()
+                    "estimated deployment gas cost {:#?}",
+                    client.estimate_gas(&tx, None).await?
                 );
-                let deploy_transaction = contract.send().await.unwrap();
-                println!("Deploy Receipt: {:#?}", deploy_transaction)
+
+                let deployer = contract.deployer;
+                let pending_tx = client.send_transaction(deployer.tx, None).await?;
+
+                let hash = pending_tx.tx_hash();
+                info!("using {} retries", retries);
+                let receipt = pending_tx.retries(*retries).await?;
+                if receipt.is_some() {
+                    let receipt = receipt.unwrap();
+                    debug!("call receipt: {:#?}", receipt);
+                    let address = receipt
+                        .contract_address
+                        .ok_or(CLIError::ContractNotDeployed)?;
+                    info!("contract address: {:#?}", address);
+                } else {
+                    return Err(Box::new(CLIError::NoReceipt(hash)));
+                }
             }
             Commands::NewPayout {
                 secret,
                 rpc_url,
                 factory_addr,
                 payout_csv,
+                retries,
             } => {
-                let mnemonic = read_to_string(secret).unwrap();
+                let mnemonic = read_to_string(secret)?;
                 let client = get_signing_provider(&mnemonic, &rpc_url).await;
-                let addr = Address::from_str(factory_addr.as_str()).unwrap();
+                let addr = Address::from_str(factory_addr.as_str())?;
 
-                let mut reader = csv::Reader::from_path(payout_csv).unwrap();
+                let mut reader = csv::Reader::from_path(payout_csv)?;
                 let mut shares: Vec<U256> = Vec::new();
                 let mut payees: Vec<Address> = Vec::new();
                 for record in reader.deserialize() {
-                    let record: Payment = record.unwrap();
-                    let payee = record.payee.parse::<Address>().unwrap();
+                    let record: Payment = record?;
+                    let payee = record.payee.parse::<Address>()?;
                     let share: U256 = (record.shares * ATTO_FIL).into();
                     payees.push(payee);
                     shares.push(share);
@@ -83,19 +112,26 @@ impl Cli {
 
                 let factory = PayoutFactory::new(addr, client.clone().into());
                 let mut payout_tx = factory.payout(payees, shares);
-                let gas = client.provider().get_gas_price().await.unwrap();
-                println!("Gas Price {:#?}", gas);
+                let gas = client.provider().get_gas_price().await?;
+                info!("gas price: {:#?}", gas);
 
-                let gas_estimate = client.estimate_gas(&payout_tx.tx, None).await.unwrap()
-                    * GAS_LIMIT_MULTIPLIER
-                    / 100;
+                let gas_estimate =
+                    client.estimate_gas(&payout_tx.tx, None).await? * GAS_LIMIT_MULTIPLIER / 100;
                 payout_tx.tx.set_gas_price(gas);
                 payout_tx.tx.set_gas(gas_estimate);
 
-                let pendind_tx = payout_tx.send().await;
-                println!("Transaction {:#?}", pendind_tx);
+                let pending_tx = payout_tx.send().await?;
+                let hash = pending_tx.tx_hash();
+                info!("using {} retries", retries);
+                let receipt = pending_tx.retries(*retries).await?;
+                if receipt.is_some() {
+                    debug!("call receipt: {:#?}", receipt.unwrap());
+                } else {
+                    return Err(Box::new(CLIError::NoReceipt(hash)));
+                }
             }
         }
+        Ok(())
     }
 }
 
@@ -111,6 +147,9 @@ pub enum Commands {
         /// RPC Url
         #[arg(short = 'U', long)]
         rpc_url: String,
+        // Num of retries when attempting to make a transaction.
+        #[arg(long, default_value = "10")]
+        retries: usize,
     },
     #[command(arg_required_else_help = true)]
     NewPayout {
@@ -126,5 +165,8 @@ pub enum Commands {
         // Path to csv payout file.
         #[arg(short = 'P', long)]
         payout_csv: PathBuf,
+        // Num of retries when attempting to make a transaction.
+        #[arg(long, default_value = "10")]
+        retries: usize,
     },
 }

@@ -6,9 +6,9 @@ edition = "2021"
 [dependencies]
 contract-bindings = { path= "./bindings" }
 clap = { version = "4.0.32", features = ["derive"] }
+thiserror = "1.0.38"
 ethers = { git = "https://github.com/gakonst/ethers-rs", default-features = false, rev = 'ee5e3e52', features = ["abigen"]  }
 tokio = { version = "1.17.0", features = ["macros"] }
-eyre = "0.6.6"
 serde_json = "1.0.91"
 serde = "1.0.152"
 log = { version = "0.4.17" }
