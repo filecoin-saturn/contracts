@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use ::ethers::contract::Contract;
 use ethers::abi::AbiEncode;
 use ethers::core::k256::{ecdsa::SigningKey, elliptic_curve::sec1::ToEncodedPoint, PublicKey};
@@ -11,11 +10,10 @@ use ethers::{
     providers::{Http, Provider},
     signers::Wallet,
 };
-use eyre::Result;
+use log::{debug, info};
 use serde_json::ser;
 use std::fs;
-use log::{debug, info};
-
+use std::sync::Arc;
 
 const DEFAULT_DERIVATION_PATH_PREFIX: &str = "m/44'/60'/0'/0/";
 
@@ -73,7 +71,7 @@ pub fn addr(mnemonic: &str) -> Result<H160, Bytes> {
 fn get_signing_wallet(private_key: U256, chain_id: u64) -> Wallet<SigningKey> {
     let private_key = parse_private_key(private_key).unwrap();
     let wallet: Wallet<ethers::core::k256::ecdsa::SigningKey> = private_key.into();
-    
+
     wallet.with_chain_id(chain_id)
 }
 
@@ -90,7 +88,7 @@ pub async fn get_signing_provider(
     let signing_wallet = get_signing_wallet(private_key, chain_id.as_u64());
 
     let provider = Arc::new(provider);
-    
+
     SignerMiddleware::new(provider, signing_wallet)
 }
 
@@ -118,4 +116,3 @@ pub fn banner() {
         )
     );
 }
-

@@ -378,10 +378,10 @@ dependencies = [
  "contract-bindings",
  "csv",
  "ethers",
- "eyre",
  "log",
  "serde",
  "serde_json",
+ "thiserror",
  "tokio",
 ]
 
