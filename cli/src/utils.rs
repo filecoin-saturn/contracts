@@ -4,7 +4,8 @@ use ethers::core::k256::{ecdsa::SigningKey, elliptic_curve::sec1::ToEncodedPoint
 use ethers::core::{types::Address, utils::keccak256};
 use ethers::signers::Signer;
 use ethers::signers::{coins_bip39::English, MnemonicBuilder};
-use ethers::types::{Bytes, H160, U256};
+use ethers::types::transaction::eip2718::TypedTransaction;
+use ethers::types::{Bytes, TransactionReceipt, H160, H256, U256};
 use ethers::{
     prelude::{Middleware, SignerMiddleware},
     providers::{Http, Provider},
@@ -16,6 +17,43 @@ use std::fs;
 use std::sync::Arc;
 
 const DEFAULT_DERIVATION_PATH_PREFIX: &str = "m/44'/60'/0'/0/";
+const GAS_LIMIT_MULTIPLIER: i32 = 130;
+
+#[derive(thiserror::Error, Debug)]
+pub enum CLIError {
+    #[error(
+        "did not receive receipt, but check a hyperspace explorer to check if tx was successful (hash: ${0})"
+    )]
+    NoReceipt(H256),
+    #[error("contract failed to deploy")]
+    ContractNotDeployed,
+}
+
+/// Sets gas for a constructed tx
+pub fn set_tx_gas(tx: &mut TypedTransaction, gas_estimate: U256, gas_price: U256) {
+    let gas_estimate = gas_estimate * GAS_LIMIT_MULTIPLIER / 100;
+    tx.set_gas(gas_estimate);
+    tx.set_gas_price(gas_price);
+}
+
+/// Sends a constructed tx
+pub async fn send_tx(
+    tx: &TypedTransaction,
+    client: SignerMiddleware<Arc<Provider<Http>>, Wallet<SigningKey>>,
+    retries: usize,
+) -> Result<TransactionReceipt, Box<dyn std::error::Error>> {
+    let pending_tx = client.send_transaction(tx.clone(), None).await?;
+
+    let hash = pending_tx.tx_hash();
+    let receipt = pending_tx.retries(retries).await?;
+    if receipt.is_some() {
+        let receipt = receipt.unwrap();
+        debug!("call receipt: {:#?}", receipt);
+        Ok(receipt)
+    } else {
+        Err(Box::new(CLIError::NoReceipt(hash)))
+    }
+}
 
 fn derive_key(mnemonic: &str, path: &str, index: u32) -> Result<U256, Bytes> {
     let derivation_path = if path.ends_with('/') {
