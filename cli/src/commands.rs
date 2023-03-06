@@ -170,7 +170,7 @@ impl Cli {
 #[allow(missing_docs)]
 #[derive(Debug, Subcommand, Clone, Deserialize, Serialize)]
 pub enum Commands {
-    /// Loads model and prints model table
+    /// Deploys a new payout factory contract
     #[command(arg_required_else_help = true)]
     Deploy {
         /// The path to the wallet mnemonic
@@ -183,6 +183,7 @@ pub enum Commands {
         #[arg(long, default_value = "10")]
         retries: usize,
     },
+    /// Creates a new paymentsplitter based payout
     #[command(arg_required_else_help = true)]
     NewPayout {
         /// Path to the wallet mnemonic
@@ -201,6 +202,7 @@ pub enum Commands {
         #[arg(long, default_value = "10")]
         retries: usize,
     },
+    /// Claims all available finds for a given address
     #[command(arg_required_else_help = true)]
     Claim {
         /// Path to the wallet mnemonic
