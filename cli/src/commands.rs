@@ -130,6 +130,38 @@ impl Cli {
                     return Err(Box::new(CLIError::NoReceipt(hash)));
                 }
             }
+            Commands::Claim {
+                secret,
+                rpc_url,
+                factory_addr,
+                addr_to_claim,
+                retries,
+            } => {
+                let mnemonic = read_to_string(secret)?;
+                let client = get_signing_provider(&mnemonic, &rpc_url).await;
+                let addr = Address::from_str(factory_addr.as_str())?;
+
+                let factory = PayoutFactory::new(addr, client.clone().into());
+                let claim_addr = Address::from_str(addr_to_claim.as_str())?;
+                let mut payout_tx = factory.release_all(claim_addr);
+                let gas = client.provider().get_gas_price().await?;
+                info!("gas price: {:#?}", gas);
+
+                let gas_estimate =
+                    client.estimate_gas(&payout_tx.tx, None).await? * GAS_LIMIT_MULTIPLIER / 100;
+                payout_tx.tx.set_gas_price(gas);
+                payout_tx.tx.set_gas(gas_estimate);
+
+                let pending_tx = payout_tx.send().await?;
+                let hash = pending_tx.tx_hash();
+                info!("using {} retries", retries);
+                let receipt = pending_tx.retries(*retries).await?;
+                if receipt.is_some() {
+                    debug!("call receipt: {:#?}", receipt.unwrap());
+                } else {
+                    return Err(Box::new(CLIError::NoReceipt(hash)));
+                }
+            }
         }
         Ok(())
     }
@@ -165,6 +197,24 @@ pub enum Commands {
         // Path to csv payout file.
         #[arg(short = 'P', long)]
         payout_csv: PathBuf,
+        // Num of retries when attempting to make a transaction.
+        #[arg(long, default_value = "10")]
+        retries: usize,
+    },
+    #[command(arg_required_else_help = true)]
+    Claim {
+        /// Path to the wallet mnemonic
+        #[arg(short = 'S', long)]
+        secret: PathBuf,
+        /// RPC Url
+        #[arg(short = 'U', long)]
+        rpc_url: String,
+        /// Path to the wallet mnemonic
+        #[arg(short = 'F', long)]
+        factory_addr: String,
+        // Address to claim for
+        #[arg(short = 'A', long)]
+        addr_to_claim: String,
         // Num of retries when attempting to make a transaction.
         #[arg(long, default_value = "10")]
         retries: usize,

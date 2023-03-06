@@ -195,3 +195,8 @@ cd ./cli
 cargo run --bin saturn-contracts new-payout  -S ./secrets/.secret -U $RPC_URL -F $FACTORY_ADDRESS -P ./secrets/payouts.csv --retries=10
 ```
 
+You can then claim funds for a specific payee using the cli: 
+```bash
+cd ./cli
+cargo run --bin saturn-contracts claim  -S ./secrets/.secret -U $RPC_URL -F $FACTORY_ADDRESS -A $CLAIM_ADDRESS --retries=10
+```
