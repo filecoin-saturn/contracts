@@ -143,16 +143,16 @@ impl Cli {
 
                 let factory = PayoutFactory::new(addr, client.clone().into());
                 let claim_addr = Address::from_str(addr_to_claim.as_str())?;
-                let mut payout_tx = factory.release_all(claim_addr);
+                let mut claim_tx = factory.release_all(claim_addr);
                 let gas = client.provider().get_gas_price().await?;
                 info!("gas price: {:#?}", gas);
 
                 let gas_estimate =
-                    client.estimate_gas(&payout_tx.tx, None).await? * GAS_LIMIT_MULTIPLIER / 100;
-                payout_tx.tx.set_gas_price(gas);
-                payout_tx.tx.set_gas(gas_estimate);
+                    client.estimate_gas(&claim_tx.tx, None).await? * GAS_LIMIT_MULTIPLIER / 100;
+                claim_tx.tx.set_gas_price(gas);
+                claim_tx.tx.set_gas(gas_estimate);
 
-                let pending_tx = payout_tx.send().await?;
+                let pending_tx = claim_tx.send().await?;
                 let hash = pending_tx.tx_hash();
                 info!("using {} retries", retries);
                 let receipt = pending_tx.retries(*retries).await?;
