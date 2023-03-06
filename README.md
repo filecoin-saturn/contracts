@@ -179,7 +179,7 @@ To use the bindings as scripts to deploy and interact with contracts first creat
 
 ```bash
 cd ./cli
-cargo run --bin saturn-contracts deploy -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 deploy 
 
 ```
 
@@ -192,6 +192,11 @@ To deploy a new `PaymentSplitter` from a deployed `PayoutFactory` contract:
 Run:
 ```bash
 cd ./cli
-cargo run --bin saturn-contracts new-payout  -S ./secrets/.secret -U $RPC_URL -F $FACTORY_ADDRESS -P ./secrets/payouts.csv --retries=10
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 new-payout -F $FACTORY_ADDRESS -P ./secrets/payouts.csv 
 ```
 
+You can then claim funds for a specific payee using the cli: 
+```bash
+cd ./cli
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 claim -F $FACTORY_ADDRESS -A $CLAIM_ADDRESS 
+```
