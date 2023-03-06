@@ -202,7 +202,7 @@ pub enum Commands {
         #[arg(long, default_value = "10")]
         retries: usize,
     },
-    /// Claims all available finds for a given address
+    /// Claims all available funds for a given address
     #[command(arg_required_else_help = true)]
     Claim {
         /// Path to the wallet mnemonic
