@@ -52,7 +52,7 @@ impl Cli {
                 retries,
             } => {
                 let mnemonic = read_to_string(secret)?;
-                let client = get_signing_provider(&mnemonic, &rpc_url).await;
+                let client = get_signing_provider(&mnemonic, rpc_url).await;
                 let addr: Address = addr(&mnemonic).unwrap();
                 let mut contract = PayoutFactory::deploy(client.clone().into(), addr)?;
 
@@ -96,7 +96,7 @@ impl Cli {
                 retries,
             } => {
                 let mnemonic = read_to_string(secret)?;
-                let client = get_signing_provider(&mnemonic, &rpc_url).await;
+                let client = get_signing_provider(&mnemonic, rpc_url).await;
                 let addr = Address::from_str(factory_addr.as_str())?;
 
                 let mut reader = csv::Reader::from_path(payout_csv)?;
@@ -138,7 +138,7 @@ impl Cli {
                 retries,
             } => {
                 let mnemonic = read_to_string(secret)?;
-                let client = get_signing_provider(&mnemonic, &rpc_url).await;
+                let client = get_signing_provider(&mnemonic, rpc_url).await;
                 let addr = Address::from_str(factory_addr.as_str())?;
 
                 let factory = PayoutFactory::new(addr, client.clone().into());
