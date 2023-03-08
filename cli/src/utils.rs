@@ -1,4 +1,5 @@
 use ::ethers::contract::Contract;
+use csv::Error as CsvError;
 use ethers::abi::AbiEncode;
 use ethers::core::k256::{ecdsa::SigningKey, elliptic_curve::sec1::ToEncodedPoint, PublicKey};
 use ethers::core::{types::Address, utils::keccak256};
@@ -12,12 +13,18 @@ use ethers::{
     signers::Wallet,
 };
 use log::{debug, info};
+use serde::Deserialize;
 use serde_json::ser;
 use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
+use tokio_postgres::Error as DbError;
+
+use crate::db::retrieve_payments;
 
 const DEFAULT_DERIVATION_PATH_PREFIX: &str = "m/44'/60'/0'/0/";
 const GAS_LIMIT_MULTIPLIER: i32 = 130;
+const ATTO_FIL: u128 = 10_u128.pow(18);
 
 #[derive(thiserror::Error, Debug)]
 pub enum CLIError {
@@ -27,6 +34,12 @@ pub enum CLIError {
     NoReceipt(H256),
     #[error("contract failed to deploy")]
     ContractNotDeployed,
+}
+
+#[derive(Deserialize, Debug)]
+struct Payment {
+    payee: String,
+    shares: u128,
 }
 
 /// Sets gas for a constructed tx
@@ -134,16 +147,47 @@ pub fn write_abi(contract: Contract<SignerMiddleware<Arc<Provider<Http>>, Wallet
     fs::write("./factoryAbi.json", string_abi).expect("Unable to write file");
 }
 
+pub fn parse_payouts_from_csv(payout_csv: &PathBuf) -> Result<(Vec<Address>, Vec<U256>), CsvError> {
+    let mut reader = csv::Reader::from_path(payout_csv)?;
+    let mut shares: Vec<U256> = Vec::new();
+    let mut payees: Vec<Address> = Vec::new();
+    for record in reader.deserialize() {
+        let record: Payment = record?;
+        let payee = record.payee.parse::<Address>().unwrap();
+        let share: U256 = (record.shares * ATTO_FIL).into();
+        payees.push(payee);
+        shares.push(share);
+    }
+
+    Ok((payees, shares))
+}
+
+pub async fn parse_payouts_from_db() -> Result<(Vec<Address>, Vec<U256>), DbError> {
+    let (payees, shares) = retrieve_payments().await.unwrap();
+
+    let payees: Vec<Address> = payees
+        .iter()
+        .map(|payee| payee.parse::<Address>().unwrap())
+        .collect();
+
+    let shares: Vec<U256> = shares
+        .iter()
+        .map(|share| U256::try_from(share * ATTO_FIL).unwrap())
+        .collect();
+
+    Ok((payees, shares))
+}
+
 pub fn banner() {
     info!(
         "{}",
         format!(
             "
-            _|_|_|              _|                                    
-            _|          _|_|_|  _|_|_|_|  _|    _|  _|  _|_|  _|_|_|    
-              _|_|    _|    _|    _|      _|    _|  _|_|      _|    _|  
-                  _|  _|    _|    _|      _|    _|  _|        _|    _|  
-            _|_|_|      _|_|_|      _|_|    _|_|_|  _|        _|    _|      
+            _|_|_|              _|
+            _|          _|_|_|  _|_|_|_|  _|    _|  _|  _|_|  _|_|_|
+              _|_|    _|    _|    _|      _|    _|  _|_|      _|    _|
+                  _|  _|    _|    _|      _|    _|  _|        _|    _|
+            _|_|_|      _|_|_|      _|_|    _|_|_|  _|        _|    _|
 
         -----------------------------------------------------------
         Saturn smart contracts 🪐.

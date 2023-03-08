@@ -3,7 +3,6 @@ use dotenv::dotenv;
 use rust_decimal::prelude::{Decimal, ToPrimitive};
 use std::env;
 use tokio_postgres::{Client, Config, Error, NoTls};
-use uuid::Uuid;
 
 async fn connect() -> Result<Client, Error> {
     dotenv().ok();
@@ -44,7 +43,9 @@ pub async fn retrieve_payments() -> Result<(Vec<String>, Vec<u128>), Error> {
     let res = client
         .query(
             "
-       SELECT * from payments
+       SELECT fil_wallet_address, fil_earned from payments
+       INNER JOIN
+            nodes on payments.node_id = nodes.id
        WHERE time_stamp <= $1::TIMESTAMP WITH TIME ZONE
        LIMIT 10
     ",
@@ -56,14 +57,11 @@ pub async fn retrieve_payments() -> Result<(Vec<String>, Vec<u128>), Error> {
     let mut payees: Vec<String> = Vec::new();
     let mut shares: Vec<u128> = Vec::new();
     for row in res {
-        let payee: Uuid = row.get(1);
-        let share: Decimal = row.get(3);
+        let payee: String = row.get(0);
+        let share: Decimal = row.get(1);
 
         payees.push(payee.to_string());
         shares.push(share.to_u128().unwrap());
     }
-
-    println!("{:#?}", payees);
-    println!("{:#?}", shares);
     Ok((payees, shares))
 }

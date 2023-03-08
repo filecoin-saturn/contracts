@@ -1,17 +1,16 @@
-use crate::db::retrieve_payments;
-use crate::utils::{get_signing_provider, send_tx, set_tx_gas, CLIError};
+use crate::utils::{
+    get_signing_provider, parse_payouts_from_csv, parse_payouts_from_db, send_tx, set_tx_gas,
+    CLIError,
+};
 use clap::{Parser, Subcommand};
 use contract_bindings::payout_factory::PayoutFactory;
 use ethers::abi::Address;
 use ethers::prelude::Middleware;
-use ethers::types::U256;
 use log::info;
 use serde::{Deserialize, Serialize};
 use std::fs::read_to_string;
 use std::path::PathBuf;
 use std::str::FromStr;
-
-const ATTO_FIL: u128 = 10_u128.pow(18);
 
 #[allow(missing_docs)]
 #[derive(Parser, Debug, Clone, Deserialize, Serialize)]
@@ -31,11 +30,6 @@ pub struct Cli {
     retries: usize,
 }
 
-#[derive(Deserialize, Debug)]
-struct Payment {
-    payee: String,
-    shares: u128,
-}
 impl Cli {
     /// Create a configuration
     pub fn create() -> Result<Self, Box<dyn std::error::Error>> {
@@ -77,17 +71,23 @@ impl Cli {
             Commands::NewPayout {
                 factory_addr,
                 payout_csv,
+                db_deploy,
             } => {
                 let addr = Address::from_str(factory_addr)?;
-                let mut reader = csv::Reader::from_path(payout_csv)?;
-                let mut shares: Vec<U256> = Vec::new();
-                let mut payees: Vec<Address> = Vec::new();
-                for record in reader.deserialize() {
-                    let record: Payment = record?;
-                    let payee = record.payee.parse::<Address>()?;
-                    let share: U256 = (record.shares * ATTO_FIL).into();
-                    payees.push(payee);
-                    shares.push(share);
+
+                println!(" Db Deploy {:#?}", db_deploy);
+                let payees;
+                let shares;
+                if *db_deploy {
+                    (payees, shares) = parse_payouts_from_db().await.unwrap();
+                } else {
+                    (payees, shares) = match payout_csv {
+                        Some(csv_path) => parse_payouts_from_csv(csv_path).unwrap(),
+                        None => {
+                            panic!("Either payout-csv or db-deployment must be defined as CLI args")
+                        }
+                    }
+                    // (payees, shares) = parse_payouts_from_csv(payout_csv).unwrap();
                 }
 
                 let factory = PayoutFactory::new(addr, client.clone().into());
@@ -125,36 +125,6 @@ impl Cli {
 
                 send_tx(&claim_tx.tx, client, self.retries).await?;
             }
-            Commands::DeployPayout { factory_addr } => {
-                let addr = Address::from_str(factory_addr)?;
-                let (payees, shares) = retrieve_payments().await.unwrap();
-
-                let payees = payees
-                    .iter()
-                    .map(|payee| payee.parse::<Address>().unwrap())
-                    .collect();
-
-                let shares = shares
-                    .iter()
-                    .map(|share| U256::try_from(share * ATTO_FIL).unwrap())
-                    .collect();
-
-                let factory = PayoutFactory::new(addr, client.clone().into());
-                let mut payout_tx = factory.payout(payees, shares);
-                let tx = payout_tx.tx.clone();
-                set_tx_gas(
-                    &mut payout_tx.tx,
-                    client.estimate_gas(&tx, None).await?,
-                    gas_price,
-                );
-
-                info!(
-                    "estimated payout gas cost {:#?}",
-                    payout_tx.tx.gas().unwrap()
-                );
-
-                send_tx(&payout_tx.tx, client, self.retries).await?;
-            }
         }
         Ok(())
     }
@@ -166,21 +136,21 @@ pub enum Commands {
     /// Deploys a new payout factory contract
     Deploy,
     /// Creates a new paymentsplitter based payout
-    #[command(arg_required_else_help = true)]
+    #[command()]
     NewPayout {
         /// PayoutFactory ethereum address.
-        #[arg(short = 'F', long)]
+        #[arg(short = 'F', long, required = true)]
         factory_addr: String,
-        // Path to csv payout file.
         #[arg(short = 'P', long)]
-        payout_csv: PathBuf,
-    },
-    /// Deploys monthly paymentsplitter contract
-    #[command(arg_required_else_help = true)]
-    DeployPayout {
-        /// PayoutFactory ethereum address.
-        #[arg(short = 'F', long)]
-        factory_addr: String,
+        payout_csv: Option<PathBuf>,
+        // Flag to determine if this is a db deployment.
+        #[arg(
+            short = 'D',
+            long,
+            // conflicts_with = "payout_csv",
+            default_value_t = false
+        )]
+        db_deploy: bool,
     },
     /// Claims all available funds for a given address
     #[command(arg_required_else_help = true)]
