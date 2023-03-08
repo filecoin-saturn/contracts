@@ -1,3 +1,4 @@
+use crate::db::retrieve_payments;
 use crate::utils::{get_signing_provider, send_tx, set_tx_gas, CLIError};
 use clap::{Parser, Subcommand};
 use contract_bindings::payout_factory::PayoutFactory;
@@ -124,6 +125,36 @@ impl Cli {
 
                 send_tx(&claim_tx.tx, client, self.retries).await?;
             }
+            Commands::DeployPayout { factory_addr } => {
+                let addr = Address::from_str(factory_addr)?;
+                let (payees, shares) = retrieve_payments().await.unwrap();
+
+                let payees = payees
+                    .iter()
+                    .map(|payee| payee.parse::<Address>().unwrap())
+                    .collect();
+
+                let shares = shares
+                    .iter()
+                    .map(|share| U256::try_from(share * ATTO_FIL).unwrap())
+                    .collect();
+
+                let factory = PayoutFactory::new(addr, client.clone().into());
+                let mut payout_tx = factory.payout(payees, shares);
+                let tx = payout_tx.tx.clone();
+                set_tx_gas(
+                    &mut payout_tx.tx,
+                    client.estimate_gas(&tx, None).await?,
+                    gas_price,
+                );
+
+                info!(
+                    "estimated payout gas cost {:#?}",
+                    payout_tx.tx.gas().unwrap()
+                );
+
+                send_tx(&payout_tx.tx, client, self.retries).await?;
+            }
         }
         Ok(())
     }
@@ -137,17 +168,24 @@ pub enum Commands {
     /// Creates a new paymentsplitter based payout
     #[command(arg_required_else_help = true)]
     NewPayout {
-        /// Path to the wallet mnemonic
+        /// PayoutFactory ethereum address.
         #[arg(short = 'F', long)]
         factory_addr: String,
         // Path to csv payout file.
         #[arg(short = 'P', long)]
         payout_csv: PathBuf,
     },
+    /// Deploys monthly paymentsplitter contract
+    #[command(arg_required_else_help = true)]
+    DeployPayout {
+        /// PayoutFactory ethereum address.
+        #[arg(short = 'F', long)]
+        factory_addr: String,
+    },
     /// Claims all available funds for a given address
     #[command(arg_required_else_help = true)]
     Claim {
-        /// Path to the wallet mnemonic
+        /// PayoutFactory ethereum address.
         #[arg(short = 'F', long)]
         factory_addr: String,
         // Address to claim for
