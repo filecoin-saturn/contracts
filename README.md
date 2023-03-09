@@ -214,7 +214,7 @@ To deploy a new `PaymentSplitter` from a deployed `PayoutFactory` contract using
 Run:
 ```bash
 cd ./cli
-cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 new-payout -F $FACTORY_ADDRESS -P --db-deploy
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 new-payout -F $FACTORY_ADDRESS --db-deploy
 ```
 #### Claiming Earnings
 You can then claim funds for a specific payee using the cli:
