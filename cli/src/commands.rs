@@ -74,8 +74,6 @@ impl Cli {
                 db_deploy,
             } => {
                 let addr = Address::from_str(factory_addr)?;
-
-                println!(" Db Deploy {:#?}", db_deploy);
                 let payees;
                 let shares;
                 if *db_deploy {
