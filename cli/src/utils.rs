@@ -354,7 +354,7 @@ fn check_address_string(address: &str) -> Result<AddressData, AddressError> {
 /// let addr = "t05088";
 /// assert_eq!(filecoin_to_eth_address(addr).unwrap(), "0xff000000000000000000000000000000000013e0");
 ///
-/// /// /// test delegated addresses
+/// // test delegated addresses
 /// let addr = "t410fkkld55ioe7qg24wvt7fu6pbknb56ht7pt4zamxa";  
 /// assert_eq!(filecoin_to_eth_address(addr).unwrap(), "0x52963ef50e27e06d72d59fcb4f3c2a687be3cfef");
 ///
