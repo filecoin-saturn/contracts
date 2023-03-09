@@ -278,7 +278,6 @@ async fn check_address_string(address: &str, rpc_url: &str) -> Result<AddressDat
             let mut buf: [u8; 6] = [0; 6];
             let payload_num_bytes = {
                 let mut writable = &mut buf[..];
-                println!("raw parsed {}", raw.parse::<u64>().unwrap());
                 leb::write::unsigned(&mut writable, raw.parse::<u64>().unwrap())
                     .map_err(|_| AddressError::InvalidLeb128)?
             };
@@ -345,6 +344,7 @@ async fn check_address_string(address: &str, rpc_url: &str) -> Result<AddressDat
         }
         // use an API call
         _ => {
+            // call to get f0 type address
             let lotus_call = json!({
               "jsonrpc": "2.0",
               "method": "Filecoin.StateLookupID",
@@ -357,9 +357,9 @@ async fn check_address_string(address: &str, rpc_url: &str) -> Result<AddressDat
                 .json(&lotus_call)
                 .send()
                 .await;
-            println!("{:#?}", response);
             let response = response.map_err(|_| AddressError::RPCFailure)?;
 
+            // f0 type address
             let lookup_resp: StateLookupIDResp = response
                 .json()
                 .await
