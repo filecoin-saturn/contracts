@@ -39,13 +39,15 @@ pub async fn retrieve_payments() -> Result<(Vec<String>, Vec<u128>), Error> {
     let client = connect().await.unwrap();
 
     let date = Utc::now();
-    println!("{:#?}", date);
     let res = client
         .query(
             "
        SELECT fil_wallet_address, fil_earned from payments
        INNER JOIN
             nodes on payments.node_id = nodes.id
+            AND cassini = true
+            AND core = false
+            AND banned_at is NULL
        WHERE time_stamp <= $1::TIMESTAMP WITH TIME ZONE
        LIMIT 10
     ",

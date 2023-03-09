@@ -177,26 +177,48 @@ forge bind  --select "(?:^|\W)PayoutFactory|PaymentSplitter(?:$|\W)" --crate-nam
 
 To use the bindings as scripts to deploy and interact with contracts first create a `./secrets/secret` file within `./cli` containing your mnemonic string (note this should only be used for testing purposes !).
 
+#### Payout Factory Deployment
 ```bash
 cd ./cli
-cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 deploy 
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 deploy
 
 ```
 
 > **Note:** The `--retries` parameter sets a number of times to poll a pending transaction before considering it as having failed. Because of the differences in block times between Filecoin / Hyperspace and Ethereum, `ethers-rs` can sometimes timeout prematurely _before_ a transaction has truly failed or succeeded (`ethers-rs` has been built with Ethereum in mind). `--retries` has a default value of 10, which empirically we have found to result in successful transactions.
 
-To deploy a new `PaymentSplitter` from a deployed `PayoutFactory` contract:
+#### Payment Splitter Deployments
+##### Using a CSV file:
+To deploy a new `PaymentSplitter` from a deployed `PayoutFactory` contract using a CSV file:
 - Set an env var called `FACTORY_ADDRESS` with the address of the deployed `PayoutFactory`.
 - Generate a csv file with the headers `payee,shares` and fill out the rows with pairs of addresses and shares.
 
 Run:
 ```bash
 cd ./cli
-cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 new-payout -F $FACTORY_ADDRESS -P ./secrets/payouts.csv 
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 new-payout -F $FACTORY_ADDRESS -P ./secrets/payouts.csv
 ```
 
-You can then claim funds for a specific payee using the cli: 
+##### Using a Database:
+To deploy a new `PaymentSplitter` from a deployed `PayoutFactory` contract using a database connection:
+- The CLI queries a table called `payments` that has the following columns:
+	- A `fil_wallet_address` columns which is a text type.
+	- A `fil_earned` which is a numeric type.
+- Generate a local `.env` file to store DB credentials. There is a `.env-example` file in the root directory of the `cli` that outlines the exact variables required to establish a database connection. Here are variables you need:
+	- `PG_PASSWORD`
+	- `PG_HOST`
+	- `PG_DATABASE`
+	- `PG_PORT`
+	- `PG_USER`
+- Note that some databases might require an ssh tunnel to establish a connection. If the database connection requires an ssh tunnel then the `PG_HOST` and `PG_PORT` should point to the ssh tunnel.
+
+Run:
 ```bash
 cd ./cli
-cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 claim -F $FACTORY_ADDRESS -A $CLAIM_ADDRESS 
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 new-payout -F $FACTORY_ADDRESS -P --db-deploy
+```
+#### Claiming Earnings
+You can then claim funds for a specific payee using the cli:
+```bash
+cd ./cli
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 claim -F $FACTORY_ADDRESS -A $CLAIM_ADDRESS
 ```
