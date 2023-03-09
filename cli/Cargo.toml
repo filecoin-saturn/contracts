@@ -18,3 +18,7 @@ dotenv = "0.15.0"
 tokio-postgres = { version = "0.7.7",  features = ["with-chrono-0_4", "with-uuid-0_8"] }
 chrono = "0.4.23"
 rust_decimal = { version = "1.28.1", features = ["db-tokio-postgres"] }
+
+base32 = "0.4.0"
+leb128 = "0.2.5"
+blake2 = "0.10.6"
