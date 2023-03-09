@@ -1,4 +1,5 @@
 use ::ethers::contract::Contract;
+use async_recursion::async_recursion;
 use blake2::digest::{Update, VariableOutput};
 use blake2::Blake2bVar;
 use ethers::abi::AbiEncode;
@@ -15,7 +16,8 @@ use ethers::{
 };
 use leb128 as leb;
 use log::{debug, info};
-use serde_json::ser;
+use serde::Deserialize;
+use serde_json::{json, ser};
 use std::fmt::Write;
 use std::fs;
 use std::sync::Arc;
@@ -109,6 +111,8 @@ pub enum AddressError {
     InvalidChecksum,
     #[error("can only convert delegated addresses to ETH")]
     OnlyConvertDelegated,
+    #[error("RPC conversion call failed")]
+    RPCFailure,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -234,7 +238,13 @@ fn validate_checksum(bytes: &[u8], checksum_bytes: &[u8]) -> bool {
     buf == checksum_bytes
 }
 
-fn check_address_string(address: &str) -> Result<AddressData, AddressError> {
+#[derive(Deserialize, Debug)]
+struct StateLookupIDResp {
+    result: String,
+}
+
+#[async_recursion]
+async fn check_address_string(address: &str, rpc_url: &str) -> Result<AddressData, AddressError> {
     info!("converting {} to ETH equivalent", address);
     let base32_alphabet = base32::Alphabet::RFC4648 { padding: false };
     if address.len() < 3 {
@@ -333,8 +343,29 @@ fn check_address_string(address: &str) -> Result<AddressData, AddressError> {
 
             AddressData { protocol, payload }
         }
+        // use an API call
         _ => {
-            unimplemented!()
+            let lotus_call = json!({
+              "jsonrpc": "2.0",
+              "method": "Filecoin.StateLookupID",
+              "params": [address, []],
+              "id": 1
+            });
+
+            let response = reqwest::Client::new()
+                .post(rpc_url)
+                .json(&lotus_call)
+                .send()
+                .await;
+            println!("{:#?}", response);
+            let response = response.map_err(|_| AddressError::RPCFailure)?;
+
+            let lookup_resp: StateLookupIDResp = response
+                .json()
+                .await
+                .map_err(|_| AddressError::RPCFailure)?;
+
+            check_address_string(&lookup_resp.result, "").await?
         }
     };
     Ok(addr)
@@ -347,22 +378,30 @@ fn check_address_string(address: &str) -> Result<AddressData, AddressError> {
 ///
 
 /// // test ID type addresses
+/// #[tokio::main]
+/// async fn main() {
 /// let addr = "t01";
-/// assert_eq!(filecoin_to_eth_address(addr).unwrap(), "0xff00000000000000000000000000000000000001");
+/// assert_eq!(filecoin_to_eth_address(addr, "").await.unwrap(), "0xff00000000000000000000000000000000000001");
 /// let addr = "t0100";
-/// assert_eq!(filecoin_to_eth_address(addr).unwrap(), "0xff00000000000000000000000000000000000064");
+/// assert_eq!(filecoin_to_eth_address(addr, "").await.unwrap(), "0xff00000000000000000000000000000000000064");
 /// let addr = "t05088";
-/// assert_eq!(filecoin_to_eth_address(addr).unwrap(), "0xff000000000000000000000000000000000013e0");
+/// assert_eq!(filecoin_to_eth_address(addr, "").await.unwrap(), "0xff000000000000000000000000000000000013e0");
 ///
 /// // test delegated addresses
 /// let addr = "t410fkkld55ioe7qg24wvt7fu6pbknb56ht7pt4zamxa";  
-/// assert_eq!(filecoin_to_eth_address(addr).unwrap(), "0x52963ef50e27e06d72d59fcb4f3c2a687be3cfef");
+/// assert_eq!(filecoin_to_eth_address(addr, "").await.unwrap(), "0x52963ef50e27e06d72d59fcb4f3c2a687be3cfef");
 ///
+/// // test SECP256K1 addresses
+/// let addr = "t1ypi542zmmgaltijzw4byonei5c267ev5iif2liy";  
+/// let addr_id = "t01004";
+/// assert_eq!(filecoin_to_eth_address(addr, "https://api.hyperspace.node.glif.io/rpc/v1").await.unwrap(),
+/// filecoin_to_eth_address(addr_id, "").await.unwrap());
+/// }
 
 /// ```
 ///
-pub fn filecoin_to_eth_address(address: &str) -> Result<String, AddressError> {
-    let address_data = check_address_string(address)?;
+pub async fn filecoin_to_eth_address(address: &str, rpc_url: &str) -> Result<String, AddressError> {
+    let address_data = check_address_string(address, rpc_url).await?;
     let addr_buffer = if matches!(address_data.protocol, Protocol::DELEGATED) {
         let sub_addr = &address_data.payload[8..];
         sub_addr.to_vec()
