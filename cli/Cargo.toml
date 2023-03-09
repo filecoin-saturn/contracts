@@ -14,3 +14,6 @@ serde = "1.0.152"
 log = { version = "0.4.17" }
 colog = { version = "1.1.0" }
 csv = "1.2.0"
+base32 = "0.4.0"
+leb128 = "0.2.5"
+blake2 = "0.10.6"
