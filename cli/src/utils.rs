@@ -346,10 +346,10 @@ async fn check_address_string(address: &str, rpc_url: &str) -> Result<AddressDat
         _ => {
             // call to get f0 type address
             let lotus_call = json!({
-              "jsonrpc": "2.0",
-              "method": "Filecoin.StateLookupID",
-              "params": [address, []],
-              "id": 1
+                "jsonrpc": "2.0",
+                "method": "Filecoin.StateLookupID",
+                "params": [address, []],
+                "id": 1
             });
 
             let response = reqwest::Client::new()

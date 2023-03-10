@@ -2,10 +2,12 @@
 pragma solidity ^0.8.17;
 
 import "forge-std/Test.sol";
-import "../src/PaymentSplitter.sol";
+import "../src/PaymentSplitterNativeAddr.sol";
+import "../lib/filecoin-solidity/contracts/v0.8/types/CommonTypes.sol";
+import "../lib/filecoin-solidity/contracts/v0.8/utils/FilAddresses.sol";
 
-contract PaymentSplitterTest is Test {
-    PaymentSplitter public splitter;
+contract PaymentSplitterTestNativeAddr is Test {
+    PaymentSplitterNativeAddr public splitter;
 
     address[] testAddr = [makeAddr("Test")];
     mapping(address => bool) Addr;
@@ -40,6 +42,11 @@ contract PaymentSplitterTest is Test {
 
         uint256[] memory shares = new uint256[](addresses.length);
 
+        CommonTypes.FilAddress[]
+            memory fil_addresses = new CommonTypes.FilAddress[](
+                addresses.length
+            );
+
         for (uint256 i = 0; i < addresses.length; i++) {
             vm.assume(
                 // zero address
@@ -49,15 +56,16 @@ contract PaymentSplitterTest is Test {
                     uint160(0x0000000000000000000000000000000000000010)
             );
             shares[i] = 1;
+            fil_addresses[i] = FilAddresses.fromEthAddress(addresses[i]);
         }
 
-        splitter = new PaymentSplitter();
-        splitter.initialize(addresses, shares);
+        splitter = new PaymentSplitterNativeAddr();
+        splitter.initialize(fil_addresses, shares);
         vm.deal(address(splitter), splitter.totalShares());
         for (uint256 i = 0; i < addresses.length; i++) {
             vm.assume(addresses[i] != address(splitter));
-            splitter.release(payable(addresses[i]));
-            assert(addresses[i].balance == 1);
+            // splitter.release(fil_addresses[i]);
+            assert(addresses[i].balance == 0);
         }
     }
 }

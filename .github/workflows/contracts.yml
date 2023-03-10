@@ -5,7 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-    paths: ['src/**', 'test/**/**']
+    paths: ["src/**", "test/**/**"]
   workflow_dispatch:
 
 jobs:
@@ -20,6 +20,12 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Install node modules
+        uses: actions/setup-node@v3
+        run: |
+          cd lib/filecoin-solidity
+          npm install
 
       - name: Set up Python
         uses: actions/setup-python@v4
