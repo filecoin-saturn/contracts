@@ -141,6 +141,11 @@ contract PaymentSplitterNativeAddr is Initializable {
             "PaymentSplitter: account has no shares"
         );
 
+        require(
+            FilAddresses.validate(account),
+            "PaymentSplitter: invalid Filecoin address"
+        );
+
         uint256 payment = releasable(account);
 
         require(payment != 0, "PaymentSplitter: account is not due payment");

@@ -121,13 +121,9 @@ impl Cli {
                 };
                 let mut claim_tx = factory.release_all(claim_addr);
                 let tx = claim_tx.tx.clone();
-                set_tx_gas(
-                    &mut claim_tx.tx,
-                    client.estimate_gas(&tx, None).await?,
-                    gas_price,
-                );
+                set_tx_gas(&mut claim_tx.tx, 100000000.into(), gas_price);
 
-                info!("estimated claim gas cost {:#?}", claim_tx.tx.gas().unwrap());
+                // info!("estimated claim gas cost {:#?}", claim_tx.tx.gas().unwrap());
 
                 send_tx(&claim_tx.tx, client, self.retries).await?;
             }
