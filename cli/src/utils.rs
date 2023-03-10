@@ -35,6 +35,13 @@ const MAX_SUBADDRESS_LEN: usize = 54;
 
 const ETH_ADDRESS_LENGTH: usize = 20;
 
+// Defines the hash length taken over addresses
+// using the Actor and SECP256K1 protocols.
+const PAYLOAD_HASH_LENGTH: usize = 20;
+
+// The length of a BLS public key
+const BLS_PUBLIC_KEY_BYTES: usize = 48;
+
 enum CoinType {
     MAIN,
     TEST,
@@ -86,7 +93,7 @@ impl From<u64> for Protocol {
 
 pub struct AddressData {
     protocol: Protocol,
-    payload: Vec<u8>,
+    pub payload: Vec<u8>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -243,8 +250,8 @@ struct StateLookupIDResp {
     result: String,
 }
 
-#[async_recursion]
-async fn check_address_string(address: &str, rpc_url: &str) -> Result<AddressData, AddressError> {
+// #[async_recursion]
+pub fn check_address_string(address: &str, _rpc_url: &str) -> Result<AddressData, AddressError> {
     info!("converting {} to ETH equivalent", address);
     let base32_alphabet = base32::Alphabet::RFC4648 { padding: false };
     if address.len() < 3 {
@@ -342,31 +349,70 @@ async fn check_address_string(address: &str, rpc_url: &str) -> Result<AddressDat
 
             AddressData { protocol, payload }
         }
-        // use an API call
-        _ => {
-            // call to get f0 type address
-            let lotus_call = json!({
-                "jsonrpc": "2.0",
-                "method": "Filecoin.StateLookupID",
-                "params": [address, []],
-                "id": 1
-            });
+        Protocol::SECP256K1 | Protocol::ACTOR | Protocol::BLS => {
+            let payload_cksm =
+                base32::decode(base32_alphabet, raw).ok_or(AddressError::InvalidBase32)?;
+            if payload_cksm.len() < CHECKSUM_HASH_LENGTH {
+                return Err(AddressError::InvalidAddress);
+            }
+            let payload = &payload_cksm[..payload_cksm.len() - CHECKSUM_HASH_LENGTH];
+            let checksum = &payload_cksm[payload.len()..];
+            if protocol == Protocol::SECP256K1 || protocol == Protocol::ACTOR {
+                if payload.len() != PAYLOAD_HASH_LENGTH {
+                    return Err(AddressError::InvalidAddress);
+                }
+            }
+            if protocol == Protocol::BLS {
+                if payload.len() != BLS_PUBLIC_KEY_BYTES {
+                    return Err(AddressError::InvalidAddress);
+                }
+            }
 
-            let response = reqwest::Client::new()
-                .post(rpc_url)
-                .json(&lotus_call)
-                .send()
-                .await;
-            let response = response.map_err(|_| AddressError::RPCFailure)?;
+            let mut protocol_buf: [u8; 1024] = [0; 1024];
+            let protocol_byte_num = {
+                let mut writable = &mut protocol_buf[..];
+                leb::write::unsigned(&mut writable, protocol.clone() as u64)
+                    .map_err(|_| AddressError::InvalidLeb128)?
+            };
+            if protocol_byte_num != 1 {
+                return Err(AddressError::InvalidLeb128);
+            }
+            let protocol_byte = protocol_buf[0..protocol_byte_num].to_vec();
 
-            // f0 type address
-            let lookup_resp: StateLookupIDResp = response
-                .json()
-                .await
-                .map_err(|_| AddressError::RPCFailure)?;
+            let bytes = [protocol_byte.as_slice(), payload].concat();
 
-            check_address_string(&lookup_resp.result, "").await?
-        }
+            if !validate_checksum(&bytes, checksum) {
+                panic!("Invalid address checksum");
+            }
+            AddressData {
+                protocol,
+                payload: payload.to_vec(),
+            }
+        } // use an API call
+          // _ => {
+          // // call to get f0 type address
+          // let lotus_call = json!({
+          //     "jsonrpc": "2.0",
+          //     "method": "Filecoin.StateLookupID",
+          //     "params": [address, []],
+          //     "id": 1
+          // });
+
+          // let response = reqwest::Client::new()
+          //     .post(rpc_url)
+          //     .json(&lotus_call)
+          //     .send()
+          //     .await;
+          // let response = response.map_err(|_| AddressError::RPCFailure)?;
+
+          // // f0 type address
+          // let lookup_resp: StateLookupIDResp = response
+          //     .json()
+          //     .await
+          //     .map_err(|_| AddressError::RPCFailure)?;
+
+          // check_address_string(&lookup_resp.result, "").await?
+          // }
     };
     Ok(addr)
 }
@@ -401,7 +447,8 @@ async fn check_address_string(address: &str, rpc_url: &str) -> Result<AddressDat
 /// ```
 ///
 pub async fn filecoin_to_eth_address(address: &str, rpc_url: &str) -> Result<String, AddressError> {
-    let address_data = check_address_string(address, rpc_url).await?;
+    // let address_data = check_address_string(address, rpc_url).await?;
+    let address_data = check_address_string(address, rpc_url)?;
     let addr_buffer = if matches!(address_data.protocol, Protocol::DELEGATED) {
         let sub_addr = &address_data.payload[8..];
         sub_addr.to_vec()
