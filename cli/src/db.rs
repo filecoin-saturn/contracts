@@ -35,7 +35,7 @@ async fn connect() -> Result<Client, Error> {
     Ok(client)
 }
 
-pub async fn retrieve_payments() -> Result<(Vec<String>, Vec<u128>), Error> {
+pub async fn retrieve_payments() -> Result<(Vec<String>, Vec<f64>), Error> {
     let client = connect().await.unwrap();
 
     let date = Utc::now();
@@ -49,7 +49,6 @@ pub async fn retrieve_payments() -> Result<(Vec<String>, Vec<u128>), Error> {
             AND core = false
             AND banned_at is NULL
        WHERE time_stamp <= $1::TIMESTAMP WITH TIME ZONE
-       LIMIT 10
     ",
             &[&date],
         )
@@ -57,13 +56,13 @@ pub async fn retrieve_payments() -> Result<(Vec<String>, Vec<u128>), Error> {
         .unwrap();
 
     let mut payees: Vec<String> = Vec::new();
-    let mut shares: Vec<u128> = Vec::new();
+    let mut shares: Vec<f64> = Vec::new();
     for row in res {
         let payee: String = row.get(0);
         let share: Decimal = row.get(1);
 
         payees.push(payee.to_string());
-        shares.push(share.to_u128().unwrap());
+        shares.push(share.to_f64().unwrap());
     }
     Ok((payees, shares))
 }

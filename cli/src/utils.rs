@@ -1,4 +1,5 @@
 use ::ethers::contract::Contract;
+use async_recursion::async_recursion;
 use blake2::digest::{Update, VariableOutput};
 use blake2::Blake2bVar;
 use csv::Error as CsvError;
@@ -14,10 +15,12 @@ use ethers::{
     providers::{Http, Provider},
     signers::Wallet,
 };
+use futures::future::join_all;
 use leb128 as leb;
 use log::{debug, info};
+use once_cell::sync::Lazy;
 use serde::Deserialize;
-use serde_json::ser;
+use serde_json::{json, ser};
 use std::fmt::Write;
 use std::fs;
 use std::path::PathBuf;
@@ -28,7 +31,7 @@ use crate::db::retrieve_payments;
 
 const DEFAULT_DERIVATION_PATH_PREFIX: &str = "m/44'/60'/0'/0/";
 const GAS_LIMIT_MULTIPLIER: i32 = 130;
-const ATTO_FIL: u128 = 10_u128.pow(18);
+static ATTO_FIL: Lazy<f64> = Lazy::new(|| 10_f64.powf(18.0));
 
 // The hash length used for calculating address checksums.
 const CHECKSUM_HASH_LENGTH: usize = 4;
@@ -117,6 +120,8 @@ pub enum AddressError {
     InvalidChecksum,
     #[error("can only convert delegated addresses to ETH")]
     OnlyConvertDelegated,
+    #[error("RPC conversion call failed")]
+    RPCFailure,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -132,7 +137,7 @@ pub enum CLIError {
 #[derive(Deserialize, Debug)]
 struct Payment {
     payee: String,
-    shares: u128,
+    shares: f64,
 }
 
 /// Sets gas for a constructed tx
@@ -239,36 +244,42 @@ pub fn write_abi(contract: Contract<SignerMiddleware<Arc<Provider<Http>>, Wallet
     fs::write("./factoryAbi.json", string_abi).expect("Unable to write file");
 }
 
-pub fn parse_payouts_from_csv(payout_csv: &PathBuf) -> Result<(Vec<Address>, Vec<U256>), CsvError> {
+pub async fn parse_payouts_from_csv(
+    payout_csv: &PathBuf,
+    rpc_url: &str,
+) -> Result<(Vec<Address>, Vec<U256>), CsvError> {
     let mut reader = csv::Reader::from_path(payout_csv)?;
     let mut shares: Vec<U256> = Vec::new();
     let mut payees: Vec<Address> = Vec::new();
+
     for record in reader.deserialize() {
         let record: Payment = record?;
-        let payee = filecoin_to_eth_address(record.payee.as_str()).unwrap();
+
+        let payee = filecoin_to_eth_address(record.payee.as_str(), rpc_url)
+            .await
+            .unwrap();
         let payee = payee.parse::<Address>().unwrap();
-        let share: U256 = (record.shares * ATTO_FIL).into();
+        let share: U256 = ((record.shares * &*ATTO_FIL) as u128).into();
         payees.push(payee);
         shares.push(share);
     }
+    println!("Payees {:#?}", shares);
 
     Ok((payees, shares))
 }
 
-pub async fn parse_payouts_from_db() -> Result<(Vec<Address>, Vec<U256>), DbError> {
+pub async fn parse_payouts_from_db(rpc_url: &str) -> Result<(Vec<Address>, Vec<U256>), DbError> {
     let (payees, shares) = retrieve_payments().await.unwrap();
 
-    let payees: Vec<Address> = payees
-        .iter()
-        .map(|payee| {
-            let eth_address = filecoin_to_eth_address(payee).unwrap();
-            eth_address.parse::<Address>().unwrap()
-        })
-        .collect();
+    let payees = join_all(payees.iter().map(|payee| async {
+        let eth_address = filecoin_to_eth_address(payee, rpc_url).await.unwrap();
+        eth_address.parse::<Address>().unwrap()
+    }))
+    .await;
 
     let shares: Vec<U256> = shares
         .iter()
-        .map(|share| U256::try_from(share * ATTO_FIL).unwrap())
+        .map(|share| U256::try_from((share * &*ATTO_FIL) as u128).unwrap())
         .collect();
 
     Ok((payees, shares))
@@ -282,7 +293,13 @@ fn validate_checksum(bytes: &[u8], checksum_bytes: &[u8]) -> bool {
     buf == checksum_bytes
 }
 
-fn check_address_string(address: &str) -> Result<AddressData, AddressError> {
+#[derive(Deserialize, Debug)]
+struct StateLookupIDResp {
+    result: String,
+}
+
+#[async_recursion]
+async fn check_address_string(address: &str, rpc_url: &str) -> Result<AddressData, AddressError> {
     info!("converting {} to ETH equivalent", address);
     let base32_alphabet = base32::Alphabet::RFC4648 { padding: false };
     if address.len() < 3 {
@@ -304,7 +321,6 @@ fn check_address_string(address: &str) -> Result<AddressData, AddressError> {
     let protocol = (protocol as u64).into();
 
     let raw = &address[2..];
-    println!("{:#?} adr", protocol);
     let addr = match protocol {
         Protocol::ID => {
             if raw.len() > MAX_INT64_STRING_LENGTH {
@@ -316,7 +332,6 @@ fn check_address_string(address: &str) -> Result<AddressData, AddressError> {
             let mut buf: [u8; 6] = [0; 6];
             let payload_num_bytes = {
                 let mut writable = &mut buf[..];
-                println!("raw parsed {}", raw.parse::<u64>().unwrap());
                 leb::write::unsigned(&mut writable, raw.parse::<u64>().unwrap())
                     .map_err(|_| AddressError::InvalidLeb128)?
             };
@@ -381,8 +396,30 @@ fn check_address_string(address: &str) -> Result<AddressData, AddressError> {
 
             AddressData { protocol, payload }
         }
+        // use an API call
         _ => {
-            unimplemented!()
+            // call to get f0 type address
+            let lotus_call = json!({
+              "jsonrpc": "2.0",
+              "method": "Filecoin.StateLookupID",
+              "params": [address, []],
+              "id": 1
+            });
+
+            let response = reqwest::Client::new()
+                .post(rpc_url)
+                .json(&lotus_call)
+                .send()
+                .await;
+            let response = response.map_err(|_| AddressError::RPCFailure)?;
+
+            // f0 type address
+            let lookup_resp: StateLookupIDResp = response
+                .json()
+                .await
+                .map_err(|_| AddressError::RPCFailure)?;
+
+            check_address_string(&lookup_resp.result, "").await?
         }
     };
     Ok(addr)
@@ -395,22 +432,30 @@ fn check_address_string(address: &str) -> Result<AddressData, AddressError> {
 ///
 
 /// // test ID type addresses
+/// #[tokio::main]
+/// async fn main() {
 /// let addr = "t01";
-/// assert_eq!(filecoin_to_eth_address(addr).unwrap(), "0xff00000000000000000000000000000000000001");
+/// assert_eq!(filecoin_to_eth_address(addr, "").await.unwrap(), "0xff00000000000000000000000000000000000001");
 /// let addr = "t0100";
-/// assert_eq!(filecoin_to_eth_address(addr).unwrap(), "0xff00000000000000000000000000000000000064");
+/// assert_eq!(filecoin_to_eth_address(addr, "").await.unwrap(), "0xff00000000000000000000000000000000000064");
 /// let addr = "t05088";
-/// assert_eq!(filecoin_to_eth_address(addr).unwrap(), "0xff000000000000000000000000000000000013e0");
+/// assert_eq!(filecoin_to_eth_address(addr, "").await.unwrap(), "0xff000000000000000000000000000000000013e0");
 ///
 /// // test delegated addresses
 /// let addr = "t410fkkld55ioe7qg24wvt7fu6pbknb56ht7pt4zamxa";
-/// assert_eq!(filecoin_to_eth_address(addr).unwrap(), "0x52963ef50e27e06d72d59fcb4f3c2a687be3cfef");
+/// assert_eq!(filecoin_to_eth_address(addr, "").await.unwrap(), "0x52963ef50e27e06d72d59fcb4f3c2a687be3cfef");
 ///
+/// // test SECP256K1 addresses
+/// let addr = "t1ypi542zmmgaltijzw4byonei5c267ev5iif2liy";
+/// let addr_id = "t01004";
+/// assert_eq!(filecoin_to_eth_address(addr, "https://api.hyperspace.node.glif.io/rpc/v1").await.unwrap(),
+/// filecoin_to_eth_address(addr_id, "").await.unwrap());
+/// }
 
 /// ```
 ///
-pub fn filecoin_to_eth_address(address: &str) -> Result<String, AddressError> {
-    let address_data = check_address_string(address)?;
+pub async fn filecoin_to_eth_address(address: &str, rpc_url: &str) -> Result<String, AddressError> {
+    let address_data = check_address_string(address, rpc_url).await?;
     let addr_buffer = if matches!(address_data.protocol, Protocol::DELEGATED) {
         let sub_addr = &address_data.payload[8..];
         sub_addr.to_vec()

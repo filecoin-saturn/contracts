@@ -1,6 +1,6 @@
 use crate::utils::{
-    get_signing_provider, parse_payouts_from_csv, parse_payouts_from_db, send_tx, set_tx_gas,
-    CLIError,
+    filecoin_to_eth_address, get_signing_provider, parse_payouts_from_csv, parse_payouts_from_db,
+    send_tx, set_tx_gas, CLIError,
 };
 use clap::{Parser, Subcommand};
 use contract_bindings::payout_factory::PayoutFactory;
@@ -77,15 +77,16 @@ impl Cli {
                 let payees;
                 let shares;
                 if *db_deploy {
-                    (payees, shares) = parse_payouts_from_db().await.unwrap();
+                    (payees, shares) = parse_payouts_from_db(&self.rpc_url).await.unwrap();
                 } else {
                     (payees, shares) = match payout_csv {
-                        Some(csv_path) => parse_payouts_from_csv(csv_path).unwrap(),
+                        Some(csv_path) => parse_payouts_from_csv(csv_path, &self.rpc_url)
+                            .await
+                            .unwrap(),
                         None => {
                             panic!("Either payout-csv or db-deployment must be defined as CLI args")
                         }
                     }
-                    // (payees, shares) = parse_payouts_from_csv(payout_csv).unwrap();
                 }
 
                 let factory = PayoutFactory::new(addr, client.clone().into());
@@ -110,8 +111,11 @@ impl Cli {
             } => {
                 let addr = Address::from_str(factory_addr)?;
                 let factory = PayoutFactory::new(addr, client.clone().into());
-                let claim_addr = Address::from_str(addr_to_claim.as_str())?;
-                let mut claim_tx = factory.release_all(claim_addr);
+                let eth_addr = filecoin_to_eth_address(addr_to_claim, &self.rpc_url)
+                    .await
+                    .unwrap();
+                let eth_addr = Address::from_str(eth_addr.as_str())?;
+                let mut claim_tx = factory.release_all(eth_addr);
                 let tx = claim_tx.tx.clone();
                 set_tx_gas(
                     &mut claim_tx.tx,
