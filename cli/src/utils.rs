@@ -224,7 +224,6 @@ pub async fn get_signing_provider(
     let provider =
         Provider::<Http>::try_from(rpc_url).expect("could not instantiate HTTP Provider");
     debug!("{:#?}", provider);
-    // provider.for_chain(Chain::try_from(3141));
     let chain_id = provider.get_chainid().await.unwrap();
     let private_key = derive_key(mnemonic, DEFAULT_DERIVATION_PATH_PREFIX, 0).unwrap();
     let signing_wallet = get_signing_wallet(private_key, chain_id.as_u64());
@@ -246,7 +245,8 @@ pub fn parse_payouts_from_csv(payout_csv: &PathBuf) -> Result<(Vec<Address>, Vec
     let mut payees: Vec<Address> = Vec::new();
     for record in reader.deserialize() {
         let record: Payment = record?;
-        let payee = record.payee.parse::<Address>().unwrap();
+        let payee = filecoin_to_eth_address(record.payee.as_str()).unwrap();
+        let payee = payee.parse::<Address>().unwrap();
         let share: U256 = (record.shares * ATTO_FIL).into();
         payees.push(payee);
         shares.push(share);
@@ -260,7 +260,10 @@ pub async fn parse_payouts_from_db() -> Result<(Vec<Address>, Vec<U256>), DbErro
 
     let payees: Vec<Address> = payees
         .iter()
-        .map(|payee| payee.parse::<Address>().unwrap())
+        .map(|payee| {
+            let eth_address = filecoin_to_eth_address(payee).unwrap();
+            eth_address.parse::<Address>().unwrap()
+        })
         .collect();
 
     let shares: Vec<U256> = shares
@@ -301,7 +304,7 @@ fn check_address_string(address: &str) -> Result<AddressData, AddressError> {
     let protocol = (protocol as u64).into();
 
     let raw = &address[2..];
-
+    println!("{:#?} adr", protocol);
     let addr = match protocol {
         Protocol::ID => {
             if raw.len() > MAX_INT64_STRING_LENGTH {
