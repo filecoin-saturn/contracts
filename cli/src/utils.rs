@@ -63,7 +63,7 @@ impl From<char> for CoinType {
     }
 }
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 enum Protocol {
     ID = 0,
     SECP256K1 = 1,
@@ -91,9 +91,11 @@ impl From<u64> for Protocol {
     }
 }
 
+#[derive(Debug)]
 pub struct AddressData {
     protocol: Protocol,
     pub payload: Vec<u8>,
+    pub bytes: Vec<u8>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -250,8 +252,7 @@ struct StateLookupIDResp {
     result: String,
 }
 
-// #[async_recursion]
-pub fn check_address_string(address: &str, _rpc_url: &str) -> Result<AddressData, AddressError> {
+pub fn check_address_string(address: &str) -> Result<AddressData, AddressError> {
     info!("converting {} to ETH equivalent", address);
     let base32_alphabet = base32::Alphabet::RFC4648 { padding: false };
     if address.len() < 3 {
@@ -270,9 +271,20 @@ pub fn check_address_string(address: &str, _rpc_url: &str) -> Result<AddressData
     if !Protocol::possible_values().contains(&protocol) {
         return Err(AddressError::InvalidProtocol);
     }
-    let protocol = (protocol as u64).into();
+    let protocol: Protocol = (protocol as u64).into();
 
     let raw = &address[2..];
+
+    let mut protocol_buf: [u8; 1024] = [0; 1024];
+    let protocol_byte_num = {
+        let mut writable = &mut protocol_buf[..];
+        leb::write::unsigned(&mut writable, protocol.clone() as u64)
+            .map_err(|_| AddressError::InvalidLeb128)?
+    };
+    if protocol_byte_num != 1 {
+        return Err(AddressError::InvalidLeb128);
+    }
+    let protocol_byte = protocol_buf[0..protocol_byte_num].to_vec();
 
     let addr = match protocol {
         Protocol::ID => {
@@ -288,9 +300,14 @@ pub fn check_address_string(address: &str, _rpc_url: &str) -> Result<AddressData
                 leb::write::unsigned(&mut writable, raw.parse::<u64>().unwrap())
                     .map_err(|_| AddressError::InvalidLeb128)?
             };
+            let payload = buf[..payload_num_bytes].to_vec();
+
+            let bytes = [protocol_byte.as_slice(), payload.as_slice()].concat();
+
             AddressData {
                 protocol,
                 payload: buf[..payload_num_bytes].to_vec(),
+                bytes,
             }
         }
         Protocol::DELEGATED => {
@@ -311,16 +328,6 @@ pub fn check_address_string(address: &str, _rpc_url: &str) -> Result<AddressData
             if sub_addr_bytes.len() > MAX_SUBADDRESS_LEN {
                 return Err(AddressError::InvalidAddress);
             }
-            let mut protocol_buf: [u8; 1024] = [0; 1024];
-            let protocol_byte_num = {
-                let mut writable = &mut protocol_buf[..];
-                leb::write::unsigned(&mut writable, protocol.clone() as u64)
-                    .map_err(|_| AddressError::InvalidLeb128)?
-            };
-            if protocol_byte_num != 1 {
-                return Err(AddressError::InvalidLeb128);
-            }
-            let protocol_byte = protocol_buf[0..protocol_byte_num].to_vec();
 
             let mut namespace_buf: [u8; 1024] = [0; 1024];
             let namespace_number = namespace_str.parse::<u64>().unwrap();
@@ -347,7 +354,11 @@ pub fn check_address_string(address: &str, _rpc_url: &str) -> Result<AddressData
             let namespace_buf = namespace_number.to_be_bytes();
             let payload = [&namespace_buf, sub_addr_bytes].concat();
 
-            AddressData { protocol, payload }
+            AddressData {
+                protocol,
+                payload,
+                bytes,
+            }
         }
         Protocol::SECP256K1 | Protocol::ACTOR | Protocol::BLS => {
             let payload_cksm =
@@ -368,17 +379,6 @@ pub fn check_address_string(address: &str, _rpc_url: &str) -> Result<AddressData
                 }
             }
 
-            let mut protocol_buf: [u8; 1024] = [0; 1024];
-            let protocol_byte_num = {
-                let mut writable = &mut protocol_buf[..];
-                leb::write::unsigned(&mut writable, protocol.clone() as u64)
-                    .map_err(|_| AddressError::InvalidLeb128)?
-            };
-            if protocol_byte_num != 1 {
-                return Err(AddressError::InvalidLeb128);
-            }
-            let protocol_byte = protocol_buf[0..protocol_byte_num].to_vec();
-
             let bytes = [protocol_byte.as_slice(), payload].concat();
 
             if !validate_checksum(&bytes, checksum) {
@@ -387,32 +387,9 @@ pub fn check_address_string(address: &str, _rpc_url: &str) -> Result<AddressData
             AddressData {
                 protocol,
                 payload: payload.to_vec(),
+                bytes,
             }
-        } // use an API call
-          // _ => {
-          // // call to get f0 type address
-          // let lotus_call = json!({
-          //     "jsonrpc": "2.0",
-          //     "method": "Filecoin.StateLookupID",
-          //     "params": [address, []],
-          //     "id": 1
-          // });
-
-          // let response = reqwest::Client::new()
-          //     .post(rpc_url)
-          //     .json(&lotus_call)
-          //     .send()
-          //     .await;
-          // let response = response.map_err(|_| AddressError::RPCFailure)?;
-
-          // // f0 type address
-          // let lookup_resp: StateLookupIDResp = response
-          //     .json()
-          //     .await
-          //     .map_err(|_| AddressError::RPCFailure)?;
-
-          // check_address_string(&lookup_resp.result, "").await?
-          // }
+        }
     };
     Ok(addr)
 }
@@ -446,9 +423,10 @@ pub fn check_address_string(address: &str, _rpc_url: &str) -> Result<AddressData
 
 /// ```
 ///
+#[async_recursion]
 pub async fn filecoin_to_eth_address(address: &str, rpc_url: &str) -> Result<String, AddressError> {
     // let address_data = check_address_string(address, rpc_url).await?;
-    let address_data = check_address_string(address, rpc_url)?;
+    let address_data = check_address_string(address)?;
     let addr_buffer = if matches!(address_data.protocol, Protocol::DELEGATED) {
         let sub_addr = &address_data.payload[8..];
         sub_addr.to_vec()
@@ -463,7 +441,29 @@ pub async fn filecoin_to_eth_address(address: &str, rpc_url: &str) -> Result<Str
         }
         addr_buffer
     } else {
-        unimplemented!()
+        //    use an API call
+        // call to get f0 type address
+        let lotus_call = json!({
+            "jsonrpc": "2.0",
+            "method": "Filecoin.StateLookupID",
+            "params": [address, []],
+            "id": 1
+        });
+
+        let response = reqwest::Client::new()
+            .post(rpc_url)
+            .json(&lotus_call)
+            .send()
+            .await;
+        let response = response.map_err(|_| AddressError::RPCFailure)?;
+
+        // f0 type address
+        let lookup_resp: StateLookupIDResp = response
+            .json()
+            .await
+            .map_err(|_| AddressError::RPCFailure)?;
+
+        return filecoin_to_eth_address(&lookup_resp.result, rpc_url).await;
     };
     let mut s = String::with_capacity(ETH_ADDRESS_LENGTH * 2);
     write!(&mut s, "0x").unwrap();

@@ -84,9 +84,10 @@ impl Cli {
                 let mut payees: Vec<FilAddress> = Vec::new();
                 for record in reader.deserialize() {
                     let record: Payment = record?;
-                    let addr = check_address_string(&record.payee, "")?;
+                    let addr = check_address_string(&record.payee)?;
+
                     let payee = FilAddress {
-                        data: addr.payload.into(),
+                        data: addr.bytes.into(),
                     };
                     let share: U256 = (record.shares * ATTO_FIL).into();
                     payees.push(payee);
@@ -115,15 +116,19 @@ impl Cli {
             } => {
                 let addr = Address::from_str(factory_addr)?;
                 let factory = PayoutFactory::new(addr, client.clone().into());
-                let addr_to_claim = check_address_string(addr_to_claim, "")?;
+                let addr_to_claim = check_address_string(addr_to_claim)?;
                 let claim_addr = FilAddress {
-                    data: addr_to_claim.payload.into(),
+                    data: addr_to_claim.bytes.into(),
                 };
                 let mut claim_tx = factory.release_all(claim_addr);
                 let tx = claim_tx.tx.clone();
-                set_tx_gas(&mut claim_tx.tx, 100000000.into(), gas_price);
+                set_tx_gas(
+                    &mut claim_tx.tx,
+                    client.estimate_gas(&tx, None).await?,
+                    gas_price,
+                );
 
-                // info!("estimated claim gas cost {:#?}", claim_tx.tx.gas().unwrap());
+                info!("estimated claim gas cost {:#?}", claim_tx.tx.gas().unwrap());
 
                 send_tx(&claim_tx.tx, client, self.retries).await?;
             }
