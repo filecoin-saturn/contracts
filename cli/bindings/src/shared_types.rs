@@ -7,7 +7,7 @@
     Debug,
     PartialEq,
     Eq,
-    Hash,
+    Hash
 )]
 pub struct FilAddress {
     pub data: ::ethers::core::types::Bytes,
