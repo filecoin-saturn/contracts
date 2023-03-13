@@ -11,3 +11,4 @@ echidna-corpus/*
 .vscode/*
 **/**/target
 **/**/secrets
+node_modules
