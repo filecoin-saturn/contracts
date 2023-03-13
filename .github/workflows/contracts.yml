@@ -21,8 +21,10 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
-      - name: Install node modules
+      - name: Install node
         uses: actions/setup-node@v3
+
+      - name: Install node modules
         run: |
           cd lib/filecoin-solidity
           npm install
