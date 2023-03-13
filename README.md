@@ -210,7 +210,7 @@ on top of the Foundry project structure.
 
 Note that dependencies still need to be installed using forge(`forge install`) as we want to manage dependencies as git modules rather than npm modules.
 
-Please use the following steps to start developing with Hardhat:
+Please use the following steps to start developing with Hardhat after you have installed the project dependencies using `forge install`:
 1. Install all hardhat deps and packages using `npm i`.
 2. Compile contracts using `npx hardhat compile`.
 3. Add tests in Javascript/Typescript to the `test` directory and run them using `npx hardhat test`.
