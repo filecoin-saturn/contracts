@@ -2,25 +2,26 @@
 
 pragma solidity ^0.8.17;
 
-import "./PaymentSplitter.sol";
+import "./PaymentSplitterNativeAddr.sol";
 import "../lib/openzeppelin-contracts/contracts/proxy/Clones.sol";
 import "../lib/openzeppelin-contracts/contracts/access/AccessControl.sol";
 
 /**
  * @title Payout factory
- * @dev This contract is a factory contract for generating new PaymentSplitter contracts and tracking old instantiations of these contracts.
+ * @dev This contract is a factory contract for generating new PaymentSplitterNativeAddr contracts and tracking old instantiations of these contracts.
  * function.
  */
-contract PayoutFactory is AccessControl {
+contract PayoutFactoryNativeAddr is AccessControl {
     event SplitterCreated(address newSplitter);
-    event PaymentReleased(address to, uint256 amount);
+    event PaymentReleased(CommonTypes.FilAddress to, uint256 amount);
     event PaymentReceived(address from, uint256 amount);
     using Clones for address;
 
     // past payout contracts
     address[] private _payouts;
     // a dummy template for instantiating future splitting contracts
-    address public immutable template = address(new PaymentSplitter());
+    address public immutable template =
+        address(new PaymentSplitterNativeAddr());
 
     /**
      * @dev Creates a new factory with an admin
@@ -51,7 +52,7 @@ contract PayoutFactory is AccessControl {
      * duplicates in `payees`.
      */
     function payout(
-        address[] memory payees,
+        CommonTypes.FilAddress[] memory payees,
         uint256[] memory shares_
     ) external onlyRole(DEFAULT_ADMIN_ROLE) returns (address instance) {
         // create new payout instance
@@ -64,7 +65,9 @@ contract PayoutFactory is AccessControl {
         emit SplitterCreated(instance);
 
         // initializes and locks in a payout
-        PaymentSplitter splitter = PaymentSplitter(payable(instance));
+        PaymentSplitterNativeAddr splitter = PaymentSplitterNativeAddr(
+            payable(instance)
+        );
         splitter.initialize(payees, shares_);
 
         // if tokens were pre-added to this contract here's where we'd fund the new contract
@@ -73,7 +76,7 @@ contract PayoutFactory is AccessControl {
     }
 
     /**
-     * @dev Returns a list of all previously generated PaymentSplitter contract addresses.
+     * @dev Returns a list of all previously generated PaymentSplitterNativeAddr contract addresses.
      */
     function payouts() external view returns (address[] memory) {
         return _payouts;
@@ -85,7 +88,9 @@ contract PayoutFactory is AccessControl {
     function totalShares() external view returns (uint256 totalValue) {
         uint256 length = _payouts.length;
         for (uint256 i = 0; i < length; i++) {
-            PaymentSplitter rewards = PaymentSplitter(payable(_payouts[i]));
+            PaymentSplitterNativeAddr rewards = PaymentSplitterNativeAddr(
+                payable(_payouts[i])
+            );
             totalValue += rewards.totalShares();
         }
     }
@@ -96,7 +101,9 @@ contract PayoutFactory is AccessControl {
     function totalReleased() external view returns (uint256 totalValue) {
         uint256 length = _payouts.length;
         for (uint256 i = 0; i < length; i++) {
-            PaymentSplitter rewards = PaymentSplitter(payable(_payouts[i]));
+            PaymentSplitterNativeAddr rewards = PaymentSplitterNativeAddr(
+                payable(_payouts[i])
+            );
             totalValue += rewards.totalReleased();
         }
     }
@@ -107,7 +114,7 @@ contract PayoutFactory is AccessControl {
      * @param account Address of the payee.  
      */
     function releasablePerContract(
-        address account
+        CommonTypes.FilAddress memory account
     )
         external
         view
@@ -119,7 +126,9 @@ contract PayoutFactory is AccessControl {
         uint256[] memory releasedFunds = new uint256[](length);
 
         for (uint256 i = 0; i < length; i++) {
-            PaymentSplitter rewards = PaymentSplitter(payable(_payouts[i]));
+            PaymentSplitterNativeAddr rewards = PaymentSplitterNativeAddr(
+                payable(_payouts[i])
+            );
             uint256 payeeShares = rewards.shares(account);
 
             if (payeeShares > 0) {
@@ -136,11 +145,13 @@ contract PayoutFactory is AccessControl {
      * @param account The address of the payee.
      */
     function releasable(
-        address account
+        CommonTypes.FilAddress memory account
     ) external view returns (uint256 totalValue) {
         uint256 length = _payouts.length;
         for (uint256 i = 0; i < length; i++) {
-            PaymentSplitter rewards = PaymentSplitter(payable(_payouts[i]));
+            PaymentSplitterNativeAddr rewards = PaymentSplitterNativeAddr(
+                payable(_payouts[i])
+            );
             totalValue += rewards.releasable(account);
         }
     }
@@ -150,11 +161,13 @@ contract PayoutFactory is AccessControl {
      * @param account The address of the payee.
      */
     function released(
-        address account
+        CommonTypes.FilAddress memory account
     ) external view returns (uint256 totalValue) {
         uint256 length = _payouts.length;
         for (uint256 i = 0; i < length; i++) {
-            PaymentSplitter rewards = PaymentSplitter(payable(_payouts[i]));
+            PaymentSplitterNativeAddr rewards = PaymentSplitterNativeAddr(
+                payable(_payouts[i])
+            );
             totalValue += rewards.released(account);
         }
     }
@@ -164,11 +177,13 @@ contract PayoutFactory is AccessControl {
      * @param account The address of the payee.
      */
     function shares(
-        address account
+        CommonTypes.FilAddress memory account
     ) external view returns (uint256 totalValue) {
         uint256 length = _payouts.length;
         for (uint256 i = 0; i < length; i++) {
-            PaymentSplitter rewards = PaymentSplitter(payable(_payouts[i]));
+            PaymentSplitterNativeAddr rewards = PaymentSplitterNativeAddr(
+                payable(_payouts[i])
+            );
             totalValue += rewards.shares(account);
         }
     }
@@ -176,7 +191,7 @@ contract PayoutFactory is AccessControl {
     /**
      * @dev Releases all available funds in previously generated payout contracts.
      */
-    function releaseAll(address account) external {
+    function releaseAll(CommonTypes.FilAddress memory account) external {
         uint256 length = _payouts.length;
         for (uint256 i = 0; i < length; i++) {
             _releasePayout(account, i);
@@ -186,23 +201,23 @@ contract PayoutFactory is AccessControl {
     /**
      * @dev Releases all available funds in selected generated payout contracts.
      * @param account The address of the payee.
-     * @param selectPayouts List of selected PaymentSplitter addresses.
+     * @param selectPayouts List of selected PaymentSplitterNativeAddr addresses.
      */
     function releaseSelect(
-        address account,
+        CommonTypes.FilAddress memory account,
         address[] memory selectPayouts
     ) external {
         uint256 length = selectPayouts.length;
         for (uint256 i = 0; i < length; i++) {
             address paymentSplitterAddress = selectPayouts[i];
-            uint256 claimable = PaymentSplitter(payable(paymentSplitterAddress))
-                .releasable(account);
+            uint256 claimable = PaymentSplitterNativeAddr(
+                payable(paymentSplitterAddress)
+            ).releasable(account);
 
             if (claimable > 0) {
                 emit PaymentReleased(account, claimable);
-                PaymentSplitter(payable(paymentSplitterAddress)).release(
-                    payable(account)
-                );
+                PaymentSplitterNativeAddr(payable(paymentSplitterAddress))
+                    .release(account);
             }
         }
     }
@@ -212,8 +227,13 @@ contract PayoutFactory is AccessControl {
      * @param account The address of the payee.
      * @param index Index of the payout contract.
      */
-    function _releasePayout(address account, uint256 index) private {
-        PaymentSplitter splitter = PaymentSplitter(payable(_payouts[index]));
+    function _releasePayout(
+        CommonTypes.FilAddress memory account,
+        uint256 index
+    ) private {
+        PaymentSplitterNativeAddr splitter = PaymentSplitterNativeAddr(
+            payable(_payouts[index])
+        );
         uint256 claimable = splitter.releasable(account);
 
         if (claimable > 0) {

@@ -1,6 +1,7 @@
-use crate::utils::{get_signing_provider, send_tx, set_tx_gas, CLIError};
+use crate::utils::{check_address_string, get_signing_provider, send_tx, set_tx_gas, CLIError};
 use clap::{Parser, Subcommand};
-use contract_bindings::payout_factory::PayoutFactory;
+use contract_bindings::payout_factory_native_addr::PayoutFactoryNativeAddr as PayoutFactory;
+use contract_bindings::shared_types::FilAddress;
 use ethers::abi::Address;
 use ethers::prelude::Middleware;
 use ethers::types::U256;
@@ -80,10 +81,14 @@ impl Cli {
                 let addr = Address::from_str(factory_addr)?;
                 let mut reader = csv::Reader::from_path(payout_csv)?;
                 let mut shares: Vec<U256> = Vec::new();
-                let mut payees: Vec<Address> = Vec::new();
+                let mut payees: Vec<FilAddress> = Vec::new();
                 for record in reader.deserialize() {
                     let record: Payment = record?;
-                    let payee = record.payee.parse::<Address>()?;
+                    let addr = check_address_string(&record.payee)?;
+
+                    let payee = FilAddress {
+                        data: addr.bytes.into(),
+                    };
                     let share: U256 = (record.shares * ATTO_FIL).into();
                     payees.push(payee);
                     shares.push(share);
@@ -111,7 +116,10 @@ impl Cli {
             } => {
                 let addr = Address::from_str(factory_addr)?;
                 let factory = PayoutFactory::new(addr, client.clone().into());
-                let claim_addr = Address::from_str(addr_to_claim.as_str())?;
+                let addr_to_claim = check_address_string(addr_to_claim)?;
+                let claim_addr = FilAddress {
+                    data: addr_to_claim.bytes.into(),
+                };
                 let mut claim_tx = factory.release_all(claim_addr);
                 let tx = claim_tx.tx.clone();
                 set_tx_gas(
