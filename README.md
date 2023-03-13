@@ -200,3 +200,21 @@ You can then claim funds for a specific payee using the cli:
 cd ./cli
 cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 claim -F $FACTORY_ADDRESS -A $CLAIM_ADDRESS 
 ```
+
+## Hardhat Integration
+
+This Foundry project has been integrated with Hardhat using the
+`hardhat-foundry` plugin available at https://hardhat.org/hardhat-runner/docs/advanced/hardhat-and-foundry for those who prefer developing using
+Hardhat rather than Foundry. This integration enables using Hardhat
+on top of the Foundry project structure.
+
+Note that dependencies still need to be installed using forge(`forge install`) as we want to manage dependencies as git modules rather than npm modules.
+
+Please use the following steps to start developing with Hardhat:
+1. Install all hardhat deps and packages using `npm i`.
+2. Compile contracts using `npx hardhat compile`.
+3. Add tests in Javascript/Typescript to the `test` directory and run them using `npx hardhat test`.
+4. There's a **sample** `hardhat_deploy.js` script in the `script/` dir that can be used to deploy the `Evaluator` contract to a network of your choosing. To deploy it to the `Goerli` network, please rename the `env.example` file to `.env`, fill in the required varaiables, uncomment the `goerli` network config in `hardhat.config.js` and run `npx hardhat run script/hardhat_deploy.js --network goerli`.
+5. Add more tasks/config etc to the `hardhat.config.js` file.
+
+For more, see the [Hardhat Docs](https://hardhat.org/hardhat-runner/docs/getting-started#overview).
