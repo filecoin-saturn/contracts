@@ -1,7 +1,9 @@
-use ::ethers::contract::Contract;
 use async_recursion::async_recursion;
 use blake2::digest::{Update, VariableOutput};
 use blake2::Blake2bVar;
+use contract_bindings::payout_factory_native_addr::PayoutFactoryNativeAddr as PayoutFactory;
+use contract_bindings::shared_types::FilAddress;
+use csv::Error as CsvError;
 use ethers::abi::AbiEncode;
 use ethers::core::k256::{ecdsa::SigningKey, elliptic_curve::sec1::ToEncodedPoint, PublicKey};
 use ethers::core::{types::Address, utils::keccak256};
@@ -16,14 +18,21 @@ use ethers::{
 };
 use leb128 as leb;
 use log::{debug, info};
+use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_json::{json, ser};
 use std::fmt::Write;
 use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
+use tokio_postgres::Error as DbError;
+
+use crate::db::retrieve_payments;
 
 const DEFAULT_DERIVATION_PATH_PREFIX: &str = "m/44'/60'/0'/0/";
 const GAS_LIMIT_MULTIPLIER: i32 = 130;
+static ATTO_FIL: Lazy<f64> = Lazy::new(|| 10_f64.powf(18.0));
+
 // The hash length used for calculating address checksums.
 const CHECKSUM_HASH_LENGTH: usize = 4;
 
@@ -134,6 +143,12 @@ pub enum CLIError {
     ContractNotDeployed,
 }
 
+#[derive(Deserialize, Debug)]
+struct Payment {
+    payee: String,
+    shares: f64,
+}
+
 /// Sets gas for a constructed tx
 pub fn set_tx_gas(tx: &mut TypedTransaction, gas_estimate: U256, gas_price: U256) {
     let gas_estimate = gas_estimate * GAS_LIMIT_MULTIPLIER / 100;
@@ -223,7 +238,6 @@ pub async fn get_signing_provider(
     let provider =
         Provider::<Http>::try_from(rpc_url).expect("could not instantiate HTTP Provider");
     debug!("{:#?}", provider);
-    // provider.for_chain(Chain::try_from(3141));
     let chain_id = provider.get_chainid().await.unwrap();
     let private_key = derive_key(mnemonic, DEFAULT_DERIVATION_PATH_PREFIX, 0).unwrap();
     let signing_wallet = get_signing_wallet(private_key, chain_id.as_u64());
@@ -233,10 +247,56 @@ pub async fn get_signing_provider(
     SignerMiddleware::new(provider, signing_wallet)
 }
 
-pub fn write_abi(contract: Contract<SignerMiddleware<Arc<Provider<Http>>, Wallet<SigningKey>>>) {
+pub fn write_abi(
+    contract: PayoutFactory<SignerMiddleware<Arc<Provider<Http>>, Wallet<SigningKey>>>,
+) {
     let abi = contract.abi();
     let string_abi = ser::to_string(abi).unwrap();
     fs::write("./factoryAbi.json", string_abi).expect("Unable to write file");
+}
+
+pub async fn parse_payouts_from_csv(
+    payout_csv: &PathBuf,
+) -> Result<(Vec<FilAddress>, Vec<U256>), CsvError> {
+    let mut reader = csv::Reader::from_path(payout_csv)?;
+    let mut shares: Vec<U256> = Vec::new();
+    let mut payees: Vec<FilAddress> = Vec::new();
+
+    for record in reader.deserialize() {
+        let record: Payment = record?;
+        let addr = check_address_string(&record.payee).unwrap();
+
+        let payee = FilAddress {
+            data: addr.bytes.into(),
+        };
+
+        let share: U256 = ((record.shares * &*ATTO_FIL) as u128).into();
+        payees.push(payee);
+        shares.push(share);
+    }
+
+    Ok((payees, shares))
+}
+
+pub async fn parse_payouts_from_db() -> Result<(Vec<FilAddress>, Vec<U256>), DbError> {
+    let (payees, shares) = retrieve_payments().await.unwrap();
+
+    let payees = payees
+        .iter()
+        .map(|payee| {
+            let addr = check_address_string(&payee).unwrap();
+            FilAddress {
+                data: addr.bytes.into(),
+            }
+        })
+        .collect();
+
+    let shares: Vec<U256> = shares
+        .iter()
+        .map(|share| U256::try_from((share * &*ATTO_FIL) as u128).unwrap())
+        .collect();
+
+    Ok((payees, shares))
 }
 
 fn validate_checksum(bytes: &[u8], checksum_bytes: &[u8]) -> bool {
@@ -411,11 +471,11 @@ pub fn check_address_string(address: &str) -> Result<AddressData, AddressError> 
 /// assert_eq!(filecoin_to_eth_address(addr, "").await.unwrap(), "0xff000000000000000000000000000000000013e0");
 ///
 /// // test delegated addresses
-/// let addr = "t410fkkld55ioe7qg24wvt7fu6pbknb56ht7pt4zamxa";  
+/// let addr = "t410fkkld55ioe7qg24wvt7fu6pbknb56ht7pt4zamxa";
 /// assert_eq!(filecoin_to_eth_address(addr, "").await.unwrap(), "0x52963ef50e27e06d72d59fcb4f3c2a687be3cfef");
 ///
 /// // test SECP256K1 addresses
-/// let addr = "t1ypi542zmmgaltijzw4byonei5c267ev5iif2liy";  
+/// let addr = "t1ypi542zmmgaltijzw4byonei5c267ev5iif2liy";
 /// let addr_id = "t01004";
 /// assert_eq!(filecoin_to_eth_address(addr, "https://api.hyperspace.node.glif.io/rpc/v1").await.unwrap(),
 /// filecoin_to_eth_address(addr_id, "").await.unwrap());
@@ -481,11 +541,11 @@ pub fn banner() {
         "{}",
         format!(
             "
-            _|_|_|              _|                                    
-            _|          _|_|_|  _|_|_|_|  _|    _|  _|  _|_|  _|_|_|    
-              _|_|    _|    _|    _|      _|    _|  _|_|      _|    _|  
-                  _|  _|    _|    _|      _|    _|  _|        _|    _|  
-            _|_|_|      _|_|_|      _|_|    _|_|_|  _|        _|    _|      
+            _|_|_|              _|
+            _|          _|_|_|  _|_|_|_|  _|    _|  _|  _|_|  _|_|_|
+              _|_|    _|    _|    _|      _|    _|  _|_|      _|    _|
+                  _|  _|    _|    _|      _|    _|  _|        _|    _|
+            _|_|_|      _|_|_|      _|_|    _|_|_|  _|        _|    _|
 
         -----------------------------------------------------------
         Saturn smart contracts 🪐.
