@@ -1,7 +1,7 @@
-use ::ethers::contract::Contract;
 use async_recursion::async_recursion;
 use blake2::digest::{Update, VariableOutput};
 use blake2::Blake2bVar;
+use contract_bindings::payout_factory_native_addr::PayoutFactoryNativeAddr as PayoutFactory;
 use contract_bindings::shared_types::FilAddress;
 use csv::Error as CsvError;
 use ethers::abi::AbiEncode;
@@ -16,7 +16,6 @@ use ethers::{
     providers::{Http, Provider},
     signers::Wallet,
 };
-use futures::future::join_all;
 use leb128 as leb;
 use log::{debug, info};
 use once_cell::sync::Lazy;
@@ -248,7 +247,9 @@ pub async fn get_signing_provider(
     SignerMiddleware::new(provider, signing_wallet)
 }
 
-pub fn write_abi(contract: Contract<SignerMiddleware<Arc<Provider<Http>>, Wallet<SigningKey>>>) {
+pub fn write_abi(
+    contract: PayoutFactory<SignerMiddleware<Arc<Provider<Http>>, Wallet<SigningKey>>>,
+) {
     let abi = contract.abi();
     let string_abi = ser::to_string(abi).unwrap();
     fs::write("./factoryAbi.json", string_abi).expect("Unable to write file");
@@ -273,7 +274,6 @@ pub async fn parse_payouts_from_csv(
         payees.push(payee);
         shares.push(share);
     }
-    println!("Payees {:#?}", shares);
 
     Ok((payees, shares))
 }
