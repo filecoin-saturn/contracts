@@ -1,6 +1,6 @@
 use crate::utils::{
     check_address_string, get_signing_provider, parse_payouts_from_csv, parse_payouts_from_db,
-    send_tx, set_tx_gas, CLIError,
+    send_tx, set_tx_gas, write_abi, CLIError,
 };
 use clap::{Parser, Subcommand};
 use contract_bindings::payout_factory_native_addr::PayoutFactoryNativeAddr as PayoutFactory;
@@ -103,7 +103,7 @@ impl Cli {
                     payout_tx.tx.gas().unwrap()
                 );
 
-                send_tx(&payout_tx.tx, client, self.retries).await?;
+                // send_tx(&payout_tx.tx, client, self.retries).await?;
             }
             Commands::Claim {
                 factory_addr,
@@ -126,6 +126,11 @@ impl Cli {
                 info!("estimated claim gas cost {:#?}", claim_tx.tx.gas().unwrap());
 
                 send_tx(&claim_tx.tx, client, self.retries).await?;
+            }
+            Commands::WriteAbi { factory_addr } => {
+                let addr = Address::from_str(factory_addr)?;
+                let contract = PayoutFactory::new(addr, client.clone().into());
+                write_abi(contract);
             }
         }
         Ok(())
@@ -163,5 +168,10 @@ pub enum Commands {
         // Address to claim for
         #[arg(short = 'A', long)]
         addr_to_claim: String,
+    },
+    /// Writes abi of the PayoutFactory to a json file.
+    WriteAbi {
+        #[arg(short = 'W', long)]
+        factory_addr: String,
     },
 }

@@ -102,7 +102,7 @@ To run tests:
 ```bash
 forge test
 ```
-> Note: TO run these tests with commonly used solidity framework we have duplicated contracts which use Ethereum-based addressing for payouts -- the tests are run over these contracts, not the Filecoin-based addressing contracts. 
+> Note: TO run these tests with commonly used solidity framework we have duplicated contracts which use Ethereum-based addressing for payouts -- the tests are run over these contracts, not the Filecoin-based addressing contracts.
 
 To run slither analyzer:
 ```bash
@@ -148,7 +148,7 @@ To deploy a new `PaymentSplitter` from a deployed `PayoutFactory` contract using
 - Set an env var called `FACTORY_ADDRESS` with the address of the deployed `PayoutFactory`.
 - Generate a csv file with the headers `payee,shares` and fill out the rows with pairs of addresses and shares.
 
-For instance: 
+For instance:
 
 ```csv
 payee,shares
@@ -185,4 +185,11 @@ You can then claim funds for a specific payee using the cli:
 ```bash
 cd ./cli
 cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 claim -F $FACTORY_ADDRESS -A $CLAIM_ADDRESS
+```
+#### Write PayoutFactory Abi
+To write the `PayoutFactory` abi to a JSON file, you can use the `write-abi` command as such:
+
+```bash
+cd ./cli
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 write-abi -F $FACTORY_ADDRESS
 ```
