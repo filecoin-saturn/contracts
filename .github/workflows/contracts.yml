@@ -1,12 +1,12 @@
 name: Tests
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
     branches: [main]
-    paths: ['src/**', 'test/**/**']
-  workflow_dispatch:
+    paths: ["src/**", "test/**/**", ".github/workflows/contracts.yml"]
 
 jobs:
   test:
@@ -21,6 +21,14 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
+      - name: Install node
+        uses: actions/setup-node@v3
+
+      - name: Install node modules
+        run: |
+          cd lib/filecoin-solidity
+          npm install
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -33,8 +41,8 @@ jobs:
       - name: Compile
         run: |
           forge build --build-info
-          solc-select install 0.8.16
-          solc-select use 0.8.16
+          solc-select install 0.8.17
+          solc-select use 0.8.17
 
       - name: Run forge tests
         run: forge test -vvv
@@ -52,9 +60,9 @@ jobs:
       - name: Echidna Tests on PaymentSplitter
         uses: crytic/echidna-action@v2
         env:
-          SOLC_VERSION: 0.8.16
+          SOLC_VERSION: 0.8.17
         with:
-          solc-version: 0.8.16
+          solc-version: 0.8.17
           files: test/echidna/PaymentSplitterTest.sol
           contract: TestPaymentSplitter
           crytic-args: --ignore-compile
@@ -62,9 +70,9 @@ jobs:
       - name: Echidna Tests on PayoutFactory
         uses: crytic/echidna-action@v2
         env:
-          SOLC_VERSION: 0.8.16
+          SOLC_VERSION: 0.8.17
         with:
-          solc-version: 0.8.16
+          solc-version: 0.8.17
           files: test/echidna/PayoutFactoryTest.sol
           contract: TestPayoutFactory
           crytic-args: --ignore-compile
@@ -72,9 +80,9 @@ jobs:
       - name: Echidna Tests on Evaluator
         uses: crytic/echidna-action@v2
         env:
-          SOLC_VERSION: 0.8.16
+          SOLC_VERSION: 0.8.17
         with:
-          solc-version: 0.8.16
+          solc-version: 0.8.17
           files: test/echidna/EvaluatorTest.sol
           contract: TestEvaluator
           crytic-args: --ignore-compile

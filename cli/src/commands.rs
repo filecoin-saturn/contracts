@@ -1,9 +1,10 @@
 use crate::utils::{
-    filecoin_to_eth_address, get_signing_provider, parse_payouts_from_csv, parse_payouts_from_db,
+    check_address_string, get_signing_provider, parse_payouts_from_csv, parse_payouts_from_db,
     send_tx, set_tx_gas, CLIError,
 };
 use clap::{Parser, Subcommand};
-use contract_bindings::payout_factory::PayoutFactory;
+use contract_bindings::payout_factory_native_addr::PayoutFactoryNativeAddr as PayoutFactory;
+use contract_bindings::shared_types::FilAddress;
 use ethers::abi::Address;
 use ethers::prelude::Middleware;
 use log::info;
@@ -76,13 +77,12 @@ impl Cli {
                 let addr = Address::from_str(factory_addr)?;
                 let payees;
                 let shares;
+
                 if *db_deploy {
-                    (payees, shares) = parse_payouts_from_db(&self.rpc_url).await.unwrap();
+                    (payees, shares) = parse_payouts_from_db().await.unwrap();
                 } else {
                     (payees, shares) = match payout_csv {
-                        Some(csv_path) => parse_payouts_from_csv(csv_path, &self.rpc_url)
-                            .await
-                            .unwrap(),
+                        Some(csv_path) => parse_payouts_from_csv(csv_path).await.unwrap(),
                         None => {
                             panic!("Either payout-csv or db-deployment must be defined as CLI args")
                         }
@@ -111,11 +111,11 @@ impl Cli {
             } => {
                 let addr = Address::from_str(factory_addr)?;
                 let factory = PayoutFactory::new(addr, client.clone().into());
-                let eth_addr = filecoin_to_eth_address(addr_to_claim, &self.rpc_url)
-                    .await
-                    .unwrap();
-                let eth_addr = Address::from_str(eth_addr.as_str())?;
-                let mut claim_tx = factory.release_all(eth_addr);
+                let addr_to_claim = check_address_string(addr_to_claim)?;
+                let claim_addr = FilAddress {
+                    data: addr_to_claim.bytes.into(),
+                };
+                let mut claim_tx = factory.release_all(claim_addr);
                 let tx = claim_tx.tx.clone();
                 set_tx_gas(
                     &mut claim_tx.tx,

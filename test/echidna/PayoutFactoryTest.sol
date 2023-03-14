@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.16;
+pragma solidity ^0.8.17;
 
 import "../../src/PayoutFactory.sol";
 import "../../src/PaymentSplitter.sol";
@@ -38,11 +38,9 @@ contract TestPayoutFactory is PayoutFactory {
         return true;
     }
 
-    function contractReleaseLessThanTotal(address[] memory arr)
-        private
-        view
-        returns (bool)
-    {
+    function contractReleaseLessThanTotal(
+        address[] memory arr
+    ) private view returns (bool) {
         for (uint256 i = 0; i < arr.length; i++) {
             PaymentSplitter splitter = PaymentSplitter(payable(arr[i]));
             address[] memory payees = splitter.payees();
@@ -67,11 +65,9 @@ contract TestPayoutFactory is PayoutFactory {
         return true;
     }
 
-    function contractSharesLessThanTotal(address[] memory arr)
-        private
-        view
-        returns (bool)
-    {
+    function contractSharesLessThanTotal(
+        address[] memory arr
+    ) private view returns (bool) {
         for (uint256 i = 0; i < arr.length; i++) {
             PaymentSplitter splitter = PaymentSplitter(payable(arr[i]));
             address[] memory payees = splitter.payees();
@@ -95,11 +91,9 @@ contract TestPayoutFactory is PayoutFactory {
         return true;
     }
 
-    function eachContractHasPayees(address[] memory arr)
-        private
-        view
-        returns (bool)
-    {
+    function eachContractHasPayees(
+        address[] memory arr
+    ) private view returns (bool) {
         uint256 i;
         for (; i < arr.length; ) {
             PaymentSplitter splitter = PaymentSplitter(payable(arr[i]));

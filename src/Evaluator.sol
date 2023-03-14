@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.16;
+pragma solidity ^0.8.17;
 
 import "./PayoutFactory.sol";
 import "../lib/openzeppelin-contracts/contracts/proxy/Clones.sol";
@@ -83,11 +83,9 @@ contract Evaluator is AccessControl {
      * @dev Returns the total claimable amount from factory
      * @param account The address of the payee.
      */
-    function releasable(address account)
-        external
-        view
-        returns (uint256 totalValue)
-    {
+    function releasable(
+        address account
+    ) external view returns (uint256 totalValue) {
         totalValue = factory.releasable(account);
     }
 
@@ -104,10 +102,10 @@ contract Evaluator is AccessControl {
      * @param account The address of the payee.
      * @param shares_ The number of shares owned by the payee.
      */
-    function rewardPayee(address account, uint256 shares_)
-        external
-        onlyRole(DEFAULT_ADMIN_ROLE)
-    {
+    function rewardPayee(
+        address account,
+        uint256 shares_
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(
             account != address(0),
             "Evaluator: account is the zero address"

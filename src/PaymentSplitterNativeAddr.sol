@@ -4,8 +4,14 @@ pragma solidity ^0.8.17;
 
 import "../lib/openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 
+import {SendAPI} from "../lib/filecoin-solidity/contracts/v0.8/SendAPI.sol";
+
+import "../lib/filecoin-solidity/contracts/v0.8/types/CommonTypes.sol";
+
+import "../lib/filecoin-solidity/contracts/v0.8/utils/FilAddresses.sol";
+
 /**
- * @title PaymentSplitter
+ * @title PaymentSplitterNativeAddr
  * @dev This contract allows to split FIL payments among a group of accounts. The sender does not need to be aware
  * that the FIL will be split in this way, since it is handled transparently by the contract.
  *
@@ -14,7 +20,7 @@ import "../lib/openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
  * an amount proportional to the percentage of total shares they were assigned. The distribution of shares is set at the
  * time of contract deployment and can't be updated thereafter.
  *
- * `PaymentSplitter` follows a _pull payment_ model. This means that payments are not automatically forwarded to the
+ * `PaymentSplitterNativeAddr` follows a _pull payment_ model. This means that payments are not automatically forwarded to the
  * accounts but kept in this contract, and the actual transfer is triggered as a separate step by calling the {release}
  * function.
  *
@@ -25,17 +31,17 @@ import "../lib/openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
  * An uninitialized contract can be taken over by an attacker
  *
  */
-contract PaymentSplitter is Initializable {
-    event PayeeAdded(address account, uint256 shares);
-    event PaymentReleased(address to, uint256 amount);
+contract PaymentSplitterNativeAddr is Initializable {
+    event PayeeAdded(CommonTypes.FilAddress account, uint256 shares);
+    event PaymentReleased(CommonTypes.FilAddress to, uint256 amount);
     event PaymentReceived(address from, uint256 amount);
 
     uint256 private _totalShares;
     uint256 private _totalReleased;
 
-    mapping(address => uint256) private _shares;
-    mapping(address => uint256) private _released;
-    address[] private _payees;
+    mapping(bytes => uint256) private _shares;
+    mapping(bytes => uint256) private _released;
+    CommonTypes.FilAddress[] private _payees;
 
     /**
      * @dev Creates an instance of `PaymentSplitter` where each account in `payees` is assigned the number of shares at
@@ -45,7 +51,7 @@ contract PaymentSplitter is Initializable {
      * duplicates in `payees`.
      */
     function initialize(
-        address[] memory payees_,
+        CommonTypes.FilAddress[] memory payees_,
         uint256[] memory shares_
     ) external payable initializer {
         require(
@@ -55,6 +61,10 @@ contract PaymentSplitter is Initializable {
         require(payees_.length > 0, "PaymentSplitter: no payees");
 
         for (uint256 i = 0; i < payees_.length; i++) {
+            require(
+                FilAddresses.validate(payees_[i]),
+                "PaymentSplitter: invalid Filecoin address"
+            );
             _addPayee(payees_[i], shares_[i]);
         }
     }
@@ -89,28 +99,34 @@ contract PaymentSplitter is Initializable {
     /**
      * @dev Getter for the payees.
      */
-    function payees() public view returns (address[] memory) {
+    function payees() public view returns (CommonTypes.FilAddress[] memory) {
         return _payees;
     }
 
     /**
      * @dev Getter for the amount of shares held by an account.
      */
-    function shares(address account) public view returns (uint256) {
-        return _shares[account];
+    function shares(
+        CommonTypes.FilAddress memory account
+    ) public view returns (uint256) {
+        return _shares[account.data];
     }
 
     /**
      * @dev Getter for the amount of FIL already released to a payee.
      */
-    function released(address account) public view returns (uint256) {
-        return _released[account];
+    function released(
+        CommonTypes.FilAddress memory account
+    ) public view returns (uint256) {
+        return _released[account.data];
     }
 
     /**
      * @dev Getter for the amount of payee's releasable FIL.
      */
-    function releasable(address account) public view returns (uint256) {
+    function releasable(
+        CommonTypes.FilAddress memory account
+    ) public view returns (uint256) {
         uint256 totalReceived = address(this).balance + totalReleased();
         return _pendingPayment(account, totalReceived, released(account));
     }
@@ -119,8 +135,16 @@ contract PaymentSplitter is Initializable {
      * @dev Triggers a transfer to `account` of the amount of FIL they are owed, according to their percentage of the
      * total shares and their previous withdrawals.
      */
-    function release(address account) public virtual {
-        require(_shares[account] > 0, "PaymentSplitter: account has no shares");
+    function release(CommonTypes.FilAddress memory account) public virtual {
+        require(
+            _shares[account.data] > 0,
+            "PaymentSplitter: account has no shares"
+        );
+
+        require(
+            FilAddresses.validate(account),
+            "PaymentSplitter: invalid Filecoin address"
+        );
 
         uint256 payment = releasable(account);
 
@@ -130,13 +154,12 @@ contract PaymentSplitter is Initializable {
         // If "_totalReleased += payment" does not overflow, then "_released[account] += payment" cannot overflow.
         _totalReleased += payment;
         unchecked {
-            _released[account] += payment;
+            _released[account.data] += payment;
         }
         emit PaymentReleased(account, payment);
-        require(
-            payable(account).send(payment),
-            "PaymentSplitter: Failed to send FIL"
-        ); // silences the unchecked return value complaint
+
+        // will revert
+        SendAPI.send(account, payment);
     }
 
     /**
@@ -144,12 +167,14 @@ contract PaymentSplitter is Initializable {
      * already released amounts.
      */
     function _pendingPayment(
-        address account,
+        CommonTypes.FilAddress memory account,
         uint256 totalReceived,
         uint256 alreadyReleased
     ) private view returns (uint256) {
         return
-            (totalReceived * _shares[account]) / _totalShares - alreadyReleased;
+            (totalReceived * _shares[account.data]) /
+            _totalShares -
+            alreadyReleased;
     }
 
     /**
@@ -157,19 +182,23 @@ contract PaymentSplitter is Initializable {
      * @param account The address of the payee to add.
      * @param shares_ The number of shares owned by the payee.
      */
-    function _addPayee(address account, uint256 shares_) private {
+    function _addPayee(
+        CommonTypes.FilAddress memory account,
+        uint256 shares_
+    ) private {
         require(
-            account != address(0),
+            keccak256(account.data) !=
+                keccak256(FilAddresses.fromEthAddress(address(0)).data),
             "PaymentSplitter: account is the zero address"
         );
         require(shares_ > 0, "PaymentSplitter: shares are 0");
         require(
-            _shares[account] == 0,
+            _shares[account.data] == 0,
             "PaymentSplitter: account already has shares"
         );
 
         _payees.push(account);
-        _shares[account] = shares_;
+        _shares[account.data] = shares_;
         _totalShares = _totalShares + shares_;
         emit PayeeAdded(account, shares_);
     }
