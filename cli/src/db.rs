@@ -4,6 +4,28 @@ use rust_decimal::prelude::{Decimal, ToPrimitive};
 use std::env;
 use tokio_postgres::{Client, Config, Error, NoTls};
 
+/// Creates a new postgres database connection and returns a Postgres Client.
+///
+/// Requires the following environment variables to be setup:
+///     PG_PASSWORD - Password of the postgres user that is used to connect
+///	    PG_HOST - The host for postgres (eg 127.0.0.1)
+///     PG_DATABASE - Database name using to connect.
+///	    PG_PORT - Port that the database is connected to (eg 5432)
+///	    PG_USER - Username of the postgres user that is used to connect
+///
+/// Usage:
+/// ```no_run
+/// use tokio_postgres::{Client}
+/// use db::{connect};
+///
+/// fn connect_example() {
+///     let client: Client = connect().await.unwrap();
+///     let query_result = client.query("SELECT * from table", &[]).await.unwrap();
+/// }
+///
+/// ```
+///
+
 async fn connect() -> Result<Client, Error> {
     dotenv().ok();
     let pg_pass = env::var("PG_PASSWORD").expect("PG_PASSWORD must be set");
