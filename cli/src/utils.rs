@@ -1,7 +1,9 @@
-use ::ethers::contract::Contract;
 use async_recursion::async_recursion;
 use blake2::digest::{Update, VariableOutput};
 use blake2::Blake2bVar;
+use contract_bindings::payout_factory_native_addr::PayoutFactoryNativeAddr as PayoutFactory;
+use contract_bindings::shared_types::FilAddress;
+use csv::Error as CsvError;
 use ethers::abi::AbiEncode;
 use ethers::core::k256::{ecdsa::SigningKey, elliptic_curve::sec1::ToEncodedPoint, PublicKey};
 use ethers::core::{types::Address, utils::keccak256};
@@ -16,14 +18,21 @@ use ethers::{
 };
 use leb128 as leb;
 use log::{debug, info};
+use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_json::{json, ser};
 use std::fmt::Write;
 use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
+use tokio_postgres::Error as DbError;
+
+use crate::db::retrieve_payments;
 
 const DEFAULT_DERIVATION_PATH_PREFIX: &str = "m/44'/60'/0'/0/";
 const GAS_LIMIT_MULTIPLIER: i32 = 130;
+static ATTO_FIL: Lazy<f64> = Lazy::new(|| 10_f64.powf(18.0));
+
 // The hash length used for calculating address checksums.
 const CHECKSUM_HASH_LENGTH: usize = 4;
 
@@ -34,6 +43,13 @@ const MAX_INT64_STRING_LENGTH: usize = 19;
 const MAX_SUBADDRESS_LEN: usize = 54;
 
 const ETH_ADDRESS_LENGTH: usize = 20;
+
+// Defines the hash length taken over addresses
+// using the Actor and SECP256K1 protocols.
+const PAYLOAD_HASH_LENGTH: usize = 20;
+
+// The length of a BLS public key
+const BLS_PUBLIC_KEY_BYTES: usize = 48;
 
 enum CoinType {
     MAIN,
@@ -56,7 +72,7 @@ impl From<char> for CoinType {
     }
 }
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 enum Protocol {
     ID = 0,
     SECP256K1 = 1,
@@ -84,9 +100,11 @@ impl From<u64> for Protocol {
     }
 }
 
+#[derive(Debug)]
 pub struct AddressData {
     protocol: Protocol,
-    payload: Vec<u8>,
+    pub payload: Vec<u8>,
+    pub bytes: Vec<u8>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -123,6 +141,12 @@ pub enum CLIError {
     NoReceipt(H256),
     #[error("contract failed to deploy")]
     ContractNotDeployed,
+}
+
+#[derive(Deserialize, Debug)]
+struct Payment {
+    payee: String,
+    shares: f64,
 }
 
 /// Sets gas for a constructed tx
@@ -214,7 +238,6 @@ pub async fn get_signing_provider(
     let provider =
         Provider::<Http>::try_from(rpc_url).expect("could not instantiate HTTP Provider");
     debug!("{:#?}", provider);
-    // provider.for_chain(Chain::try_from(3141));
     let chain_id = provider.get_chainid().await.unwrap();
     let private_key = derive_key(mnemonic, DEFAULT_DERIVATION_PATH_PREFIX, 0).unwrap();
     let signing_wallet = get_signing_wallet(private_key, chain_id.as_u64());
@@ -224,10 +247,56 @@ pub async fn get_signing_provider(
     SignerMiddleware::new(provider, signing_wallet)
 }
 
-pub fn write_abi(contract: Contract<SignerMiddleware<Arc<Provider<Http>>, Wallet<SigningKey>>>) {
+pub fn write_abi(
+    contract: PayoutFactory<SignerMiddleware<Arc<Provider<Http>>, Wallet<SigningKey>>>,
+) {
     let abi = contract.abi();
     let string_abi = ser::to_string(abi).unwrap();
     fs::write("./factoryAbi.json", string_abi).expect("Unable to write file");
+}
+
+pub async fn parse_payouts_from_csv(
+    payout_csv: &PathBuf,
+) -> Result<(Vec<FilAddress>, Vec<U256>), CsvError> {
+    let mut reader = csv::Reader::from_path(payout_csv)?;
+    let mut shares: Vec<U256> = Vec::new();
+    let mut payees: Vec<FilAddress> = Vec::new();
+
+    for record in reader.deserialize() {
+        let record: Payment = record?;
+        let addr = check_address_string(&record.payee).unwrap();
+
+        let payee = FilAddress {
+            data: addr.bytes.into(),
+        };
+
+        let share: U256 = ((record.shares * &*ATTO_FIL) as u128).into();
+        payees.push(payee);
+        shares.push(share);
+    }
+
+    Ok((payees, shares))
+}
+
+pub async fn parse_payouts_from_db() -> Result<(Vec<FilAddress>, Vec<U256>), DbError> {
+    let (payees, shares) = retrieve_payments().await.unwrap();
+
+    let payees = payees
+        .iter()
+        .map(|payee| {
+            let addr = check_address_string(&payee).unwrap();
+            FilAddress {
+                data: addr.bytes.into(),
+            }
+        })
+        .collect();
+
+    let shares: Vec<U256> = shares
+        .iter()
+        .map(|share| U256::try_from((share * &*ATTO_FIL) as u128).unwrap())
+        .collect();
+
+    Ok((payees, shares))
 }
 
 fn validate_checksum(bytes: &[u8], checksum_bytes: &[u8]) -> bool {
@@ -243,8 +312,7 @@ struct StateLookupIDResp {
     result: String,
 }
 
-#[async_recursion]
-async fn check_address_string(address: &str, rpc_url: &str) -> Result<AddressData, AddressError> {
+pub fn check_address_string(address: &str) -> Result<AddressData, AddressError> {
     info!("converting {} to ETH equivalent", address);
     let base32_alphabet = base32::Alphabet::RFC4648 { padding: false };
     if address.len() < 3 {
@@ -263,9 +331,20 @@ async fn check_address_string(address: &str, rpc_url: &str) -> Result<AddressDat
     if !Protocol::possible_values().contains(&protocol) {
         return Err(AddressError::InvalidProtocol);
     }
-    let protocol = (protocol as u64).into();
+    let protocol: Protocol = (protocol as u64).into();
 
     let raw = &address[2..];
+
+    let mut protocol_buf: [u8; 1024] = [0; 1024];
+    let protocol_byte_num = {
+        let mut writable = &mut protocol_buf[..];
+        leb::write::unsigned(&mut writable, protocol.clone() as u64)
+            .map_err(|_| AddressError::InvalidLeb128)?
+    };
+    if protocol_byte_num != 1 {
+        return Err(AddressError::InvalidLeb128);
+    }
+    let protocol_byte = protocol_buf[0..protocol_byte_num].to_vec();
 
     let addr = match protocol {
         Protocol::ID => {
@@ -281,9 +360,14 @@ async fn check_address_string(address: &str, rpc_url: &str) -> Result<AddressDat
                 leb::write::unsigned(&mut writable, raw.parse::<u64>().unwrap())
                     .map_err(|_| AddressError::InvalidLeb128)?
             };
+            let payload = buf[..payload_num_bytes].to_vec();
+
+            let bytes = [protocol_byte.as_slice(), payload.as_slice()].concat();
+
             AddressData {
                 protocol,
                 payload: buf[..payload_num_bytes].to_vec(),
+                bytes,
             }
         }
         Protocol::DELEGATED => {
@@ -304,16 +388,6 @@ async fn check_address_string(address: &str, rpc_url: &str) -> Result<AddressDat
             if sub_addr_bytes.len() > MAX_SUBADDRESS_LEN {
                 return Err(AddressError::InvalidAddress);
             }
-            let mut protocol_buf: [u8; 1024] = [0; 1024];
-            let protocol_byte_num = {
-                let mut writable = &mut protocol_buf[..];
-                leb::write::unsigned(&mut writable, protocol.clone() as u64)
-                    .map_err(|_| AddressError::InvalidLeb128)?
-            };
-            if protocol_byte_num != 1 {
-                return Err(AddressError::InvalidLeb128);
-            }
-            let protocol_byte = protocol_buf[0..protocol_byte_num].to_vec();
 
             let mut namespace_buf: [u8; 1024] = [0; 1024];
             let namespace_number = namespace_str.parse::<u64>().unwrap();
@@ -340,32 +414,41 @@ async fn check_address_string(address: &str, rpc_url: &str) -> Result<AddressDat
             let namespace_buf = namespace_number.to_be_bytes();
             let payload = [&namespace_buf, sub_addr_bytes].concat();
 
-            AddressData { protocol, payload }
+            AddressData {
+                protocol,
+                payload,
+                bytes,
+            }
         }
-        // use an API call
-        _ => {
-            // call to get f0 type address
-            let lotus_call = json!({
-              "jsonrpc": "2.0",
-              "method": "Filecoin.StateLookupID",
-              "params": [address, []],
-              "id": 1
-            });
+        Protocol::SECP256K1 | Protocol::ACTOR | Protocol::BLS => {
+            let payload_cksm =
+                base32::decode(base32_alphabet, raw).ok_or(AddressError::InvalidBase32)?;
+            if payload_cksm.len() < CHECKSUM_HASH_LENGTH {
+                return Err(AddressError::InvalidAddress);
+            }
+            let payload = &payload_cksm[..payload_cksm.len() - CHECKSUM_HASH_LENGTH];
+            let checksum = &payload_cksm[payload.len()..];
+            if protocol == Protocol::SECP256K1 || protocol == Protocol::ACTOR {
+                if payload.len() != PAYLOAD_HASH_LENGTH {
+                    return Err(AddressError::InvalidAddress);
+                }
+            }
+            if protocol == Protocol::BLS {
+                if payload.len() != BLS_PUBLIC_KEY_BYTES {
+                    return Err(AddressError::InvalidAddress);
+                }
+            }
 
-            let response = reqwest::Client::new()
-                .post(rpc_url)
-                .json(&lotus_call)
-                .send()
-                .await;
-            let response = response.map_err(|_| AddressError::RPCFailure)?;
+            let bytes = [protocol_byte.as_slice(), payload].concat();
 
-            // f0 type address
-            let lookup_resp: StateLookupIDResp = response
-                .json()
-                .await
-                .map_err(|_| AddressError::RPCFailure)?;
-
-            check_address_string(&lookup_resp.result, "").await?
+            if !validate_checksum(&bytes, checksum) {
+                panic!("Invalid address checksum");
+            }
+            AddressData {
+                protocol,
+                payload: payload.to_vec(),
+                bytes,
+            }
         }
     };
     Ok(addr)
@@ -388,11 +471,11 @@ async fn check_address_string(address: &str, rpc_url: &str) -> Result<AddressDat
 /// assert_eq!(filecoin_to_eth_address(addr, "").await.unwrap(), "0xff000000000000000000000000000000000013e0");
 ///
 /// // test delegated addresses
-/// let addr = "t410fkkld55ioe7qg24wvt7fu6pbknb56ht7pt4zamxa";  
+/// let addr = "t410fkkld55ioe7qg24wvt7fu6pbknb56ht7pt4zamxa";
 /// assert_eq!(filecoin_to_eth_address(addr, "").await.unwrap(), "0x52963ef50e27e06d72d59fcb4f3c2a687be3cfef");
 ///
 /// // test SECP256K1 addresses
-/// let addr = "t1ypi542zmmgaltijzw4byonei5c267ev5iif2liy";  
+/// let addr = "t1ypi542zmmgaltijzw4byonei5c267ev5iif2liy";
 /// let addr_id = "t01004";
 /// assert_eq!(filecoin_to_eth_address(addr, "https://api.hyperspace.node.glif.io/rpc/v1").await.unwrap(),
 /// filecoin_to_eth_address(addr_id, "").await.unwrap());
@@ -400,8 +483,10 @@ async fn check_address_string(address: &str, rpc_url: &str) -> Result<AddressDat
 
 /// ```
 ///
+#[async_recursion]
 pub async fn filecoin_to_eth_address(address: &str, rpc_url: &str) -> Result<String, AddressError> {
-    let address_data = check_address_string(address, rpc_url).await?;
+    // let address_data = check_address_string(address, rpc_url).await?;
+    let address_data = check_address_string(address)?;
     let addr_buffer = if matches!(address_data.protocol, Protocol::DELEGATED) {
         let sub_addr = &address_data.payload[8..];
         sub_addr.to_vec()
@@ -416,7 +501,29 @@ pub async fn filecoin_to_eth_address(address: &str, rpc_url: &str) -> Result<Str
         }
         addr_buffer
     } else {
-        unimplemented!()
+        //    use an API call
+        // call to get f0 type address
+        let lotus_call = json!({
+            "jsonrpc": "2.0",
+            "method": "Filecoin.StateLookupID",
+            "params": [address, []],
+            "id": 1
+        });
+
+        let response = reqwest::Client::new()
+            .post(rpc_url)
+            .json(&lotus_call)
+            .send()
+            .await;
+        let response = response.map_err(|_| AddressError::RPCFailure)?;
+
+        // f0 type address
+        let lookup_resp: StateLookupIDResp = response
+            .json()
+            .await
+            .map_err(|_| AddressError::RPCFailure)?;
+
+        return filecoin_to_eth_address(&lookup_resp.result, rpc_url).await;
     };
     let mut s = String::with_capacity(ETH_ADDRESS_LENGTH * 2);
     write!(&mut s, "0x").unwrap();
@@ -434,11 +541,11 @@ pub fn banner() {
         "{}",
         format!(
             "
-            _|_|_|              _|                                    
-            _|          _|_|_|  _|_|_|_|  _|    _|  _|  _|_|  _|_|_|    
-              _|_|    _|    _|    _|      _|    _|  _|_|      _|    _|  
-                  _|  _|    _|    _|      _|    _|  _|        _|    _|  
-            _|_|_|      _|_|_|      _|_|    _|_|_|  _|        _|    _|      
+            _|_|_|              _|
+            _|          _|_|_|  _|_|_|_|  _|    _|  _|  _|_|  _|_|_|
+              _|_|    _|    _|    _|      _|    _|  _|_|      _|    _|
+                  _|  _|    _|    _|      _|    _|  _|        _|    _|
+            _|_|_|      _|_|_|      _|_|    _|_|_|  _|        _|    _|
 
         -----------------------------------------------------------
         Saturn smart contracts 🪐.

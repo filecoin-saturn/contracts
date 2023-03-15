@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.16;
+pragma solidity ^0.8.17;
 
 import "../../src/PayoutFactory.sol";
 import "../../src/Evaluator.sol";
@@ -21,11 +21,9 @@ contract TestEvaluator is Evaluator {
 
     mapping(address => bool) Addr;
 
-    function payeeSharesLessThanTotal(address[] memory arr)
-        private
-        view
-        returns (bool)
-    {
+    function payeeSharesLessThanTotal(
+        address[] memory arr
+    ) private view returns (bool) {
         uint256 i;
         for (; i < arr.length; ) {
             if (shares(arr[i]) > totalShares()) {

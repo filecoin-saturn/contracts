@@ -18,13 +18,16 @@ The first contract implements a simple payment splitter which, when instantiated
 
 ```solidity
 /**
-* @dev Creates an instance of `PaymentSplitter` where each account in `payees` is assigned the number of shares at
+* @dev Creates an instance of `PaymentSplitterNativeAddr` where each account in `payees` is assigned the number of shares at
 * the matching position in the `shares` array.
 *
 * All addresses in `payees` must be non-zero. Both arrays must have the same non-zero length, and there must be no
 * duplicates in `payees`.
 */
-initialize(address[] memory payees, uint256[] memory shares_) payable {...}
+function initialize(
+        CommonTypes.FilAddress[] memory payees_,
+        uint256[] memory shares_
+    ) external payable
 
 ```
 
@@ -32,10 +35,10 @@ The release function can then be triggered to release payments owed to a specifi
 
 ```solidity
 /**
-* @dev Triggers a transfer to `account` of the amount of Ether they are owed, according to their percentage of the
+* @dev Triggers a transfer to `account` of the amount of FIL they are owed, according to their percentage of the
 * total shares and their previous withdrawals.
 */
-function release(address payable account) public virtual {...}
+function release(CommonTypes.FilAddress memory account) public virtual {...}
 
 ```
 
@@ -46,7 +49,7 @@ The second contract is a payout factory contract. Its core functionality, which 
 /**
 * @dev Spins up a new payment splitter.
 */
-function payout(address[] memory payees, uint256[] memory shares_)
+function payout(CommonTypes.FilAddress[] memory payees_, uint256[] memory shares_)
 	external
 	onlyRole(DEFAULT_ADMIN_ROLE)
 	returns (address instance) {...}
@@ -59,7 +62,7 @@ The contract also keeps track of all past payout contracts such that we can quer
 * @dev Returns the total claimable amount over all previously generated payout contracts.
 * @param account The address of the payee.
 */
-function releasable(address account)
+function releasable(CommonTypes.FilAddress memory account)
 	external
 	view
 	returns (uint256 totalValue) {...}
@@ -68,14 +71,14 @@ function releasable(address account)
 * @dev Releases all available funds in previously generated payout contracts.
 * @param account The address of the payee.
 */
-function releaseAll(address account) external {...}
+function releaseAll(CommonTypes.FilAddress memory account) external {...}
 
 /**
 * @dev Releases all available funds in a single previously generated payout contract.
-* @param account The address of the payee.
+* @param account The fil address of the payee.
 * @param index Index of the payout contract.
 */
-function _releasePayout(address account, uint256 index) private {...}
+function _releasePayout(CommonTypes.FilAddress memory account, uint256 index) private {...}
 ```
 
 The third contract, is a simple evaluator which keeps track of how much each payee is owed in a given evaluation period. For now this value can only be _incremented_ by way of `rewardPayee`. This contract is also bundled with a  `PayoutFactory` upon construction. The evaluator contract is the admin of the factory which enables it to generate new payouts at the end of a given evaluation period. It uses an internal mapping (`mapping(uint256 => mapping(address => uint256)) private _shares`) as values for the payout. Whereby this mapping is reset after the call. )
@@ -99,6 +102,7 @@ To run tests:
 ```bash
 forge test
 ```
+> Note: TO run these tests with commonly used solidity framework we have duplicated contracts which use Ethereum-based addressing for payouts -- the tests are run over these contracts, not the Filecoin-based addressing contracts.
 
 To run slither analyzer:
 ```bash
@@ -114,54 +118,6 @@ To run echidna fuzzing tests, first install [echidna](https://github.com/crytic/
 echidna-test test/echidna/PaymentSplitterTest.sol --contract TestPaymentSplitter --config echidnaconfig.yaml
 ```
 
-### Deployment
-
-> TODO: Implement a deployment script for the evaluator contract.
-
-
-To deploy a Factory contract to the hyperspace testnet you need to create a list of payees in a `.payees`. This is a new line delineated list of address we want to send payouts to. For instance:
-```bash
-0x1FE76102978Dbb20566BA59E29e6256715a7de4d
-0xd3043090211ebd3dabc74d0eb9cc468e1dfbb700
-...
-```
-
-Conversely `.shares` represents the payments owed (in attoFil and in order) for each of those addresses:
-```bash
-10
-12
-...
-```
-
-Finally you need a `.secret` file which includes the list of mnemonic words for a throwaway testnet account that has been pre-filled with [test FIL](https://hyperspace.yoga/#faucet). 🚨🚨 Note that this should not be an address that is of import to you, this is solely for testing purposes. 🚨🚨
-
-You need to set an environment variable for the Filecoin testnet we want to use. This can be done via an environment variable or a `.env` file that is then sourced. For instance:
-```bash
-HYPERSPACE_RPC_URL="https://api.hyperspace.node.glif.io/rpc/v0"
-```
-
-To deploy the factory contract with a local instance of the EVM, and pre-fill it with ETH you can run the deployment script.
-```bash
-forge script script/Deploy.sol:FactoryDeployScript --broadcast --verify
-```
-
-To deploy it to the fEVM and prefill it with test FIL you can run it with the environment variable set previously. You also want to increase the gas estimate multiplier (TODO: finetune this value), and allow for many retries to fetch receipts from the RPC endpoint. You need to ensure that the address you provided the secret for previously has sufficient test FIL to payout _all the owed shares_ defined in `.shares`.
-```bash
-forge script script/Deploy.sol:FactoryDeployScript --broadcast --verify --rpc-url ${HYPERSPACE_RPC_URL} --gas-estimate-multiplier 10000 --slow
-```
-
-
-You can then spin out a new payment splitter contract. First set `FACTORY_ADDRESS` to the deployed factory contract's ETH address. Then run:
-```bash
-forge script script/Payout.sol:PaymentSplitterScript --broadcast --verify --rpc-url ${HYPERSPACE_RPC_URL} --gas-estimate-multiplier 10000 --slow
-```
-
-This command will return the testnet address, which you can check out on an [explorer](https://hyperspace.filfox.info/en). If you want to interact with the contract we recommend using `cast` (installed with forge).
-
-```bash
-cast send ${CONTRACT_ADDRESS} "release(address)" ${ADDRESS_TO_PAY}  --rpc-url ${HYPERSPACE_RPC_URL} --private-key=${HYPERSPACE_PRIVKEY}
-```
-
 
 ### Bindings
 
@@ -170,36 +126,68 @@ Foundry generates bindings for solidity contracts that allow for programmatic in
 To generate the bindings we use the `forge bind` commmand and select desired contracts as follows:
 
 ```bash
-forge bind  --select "(?:^|\W)PayoutFactory|PaymentSplitter(?:$|\W)" --crate-name contract-bindings -b ./cli/bindings
+forge bind  --select "(?:^|\W)PayoutFactoryNativeAddr|PaymentSplitterNativeAddr(?:$|\W)" --crate-name contract-bindings -b ./cli/bindings
 ```
 
 ## Cli
 
 To use the bindings as scripts to deploy and interact with contracts first create a `./secrets/secret` file within `./cli` containing your mnemonic string (note this should only be used for testing purposes !).
 
+#### Payout Factory Deployment
 ```bash
 cd ./cli
-cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 deploy 
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 deploy
 
 ```
 
 > **Note:** The `--retries` parameter sets a number of times to poll a pending transaction before considering it as having failed. Because of the differences in block times between Filecoin / Hyperspace and Ethereum, `ethers-rs` can sometimes timeout prematurely _before_ a transaction has truly failed or succeeded (`ethers-rs` has been built with Ethereum in mind). `--retries` has a default value of 10, which empirically we have found to result in successful transactions.
 
-To deploy a new `PaymentSplitter` from a deployed `PayoutFactory` contract:
+#### Payment Splitter Deployments
+##### Using a CSV file:
+To deploy a new `PaymentSplitter` from a deployed `PayoutFactory` contract using a CSV file:
 - Set an env var called `FACTORY_ADDRESS` with the address of the deployed `PayoutFactory`.
 - Generate a csv file with the headers `payee,shares` and fill out the rows with pairs of addresses and shares.
+
+For instance:
+
+```csv
+payee,shares
+t1ypi542zmmgaltijzw4byonei5c267ev5iif2liy,1
+t410f4bmm756u5kft2czgqll4oybvtch3jj5v64yjeya,1
+```
+
+Now run:
+```bash
+cd ./cli
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 new-payout -F $FACTORY_ADDRESS -P ./secrets/payouts.csv
+```
+
+##### Using a Database:
+To deploy a new `PaymentSplitter` from a deployed `PayoutFactory` contract using a database connection:
+- The CLI queries a table called `payments` that has the following columns:
+	- A `fil_wallet_address` columns which is a text type.
+	- A `fil_earned` which is a numeric type.
+- Generate a local `.env` file to store DB credentials. There is a `.env-example` file in the root directory of the `cli` that outlines the exact variables required to establish a database connection. Here are variables you need:
+	- `PG_PASSWORD`
+	- `PG_HOST`
+	- `PG_DATABASE`
+	- `PG_PORT`
+	- `PG_USER`
+- Note that some databases might require an ssh tunnel to establish a connection. If the database connection requires an ssh tunnel then the `PG_HOST` and `PG_PORT` should point to the ssh tunnel.
 
 Run:
 ```bash
 cd ./cli
-cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 new-payout -F $FACTORY_ADDRESS -P ./secrets/payouts.csv 
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 new-payout -F $FACTORY_ADDRESS --db-deploy
 ```
-
-You can then claim funds for a specific payee using the cli: 
+#### Claiming Earnings
+You can then claim funds for a specific payee using the cli:
 ```bash
 cd ./cli
-cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 claim -F $FACTORY_ADDRESS -A $CLAIM_ADDRESS 
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 claim -F $FACTORY_ADDRESS -A $CLAIM_ADDRESS
 ```
+#### Write PayoutFactory Abi
+To write the `PayoutFactory` abi to a JSON file, you can use the `write-abi` command as such:
 
 ## Hardhat Integration
 
@@ -216,5 +204,3 @@ Please use the following steps to start developing with Hardhat after you have i
 3. Add tests in Javascript/Typescript to the `test` directory and run them using `npx hardhat test`.
 4. There's a **sample** `hardhat_deploy.js` script in the `script/` dir that can be used to deploy the `Evaluator` contract to a network of your choosing. To deploy it to the `Goerli` network, please rename the `env.example` file to `.env`, fill in the required varaiables, uncomment the `goerli` network config in `hardhat.config.js` and run `npx hardhat run script/hardhat_deploy.js --network goerli`.
 5. Add more tasks/config etc to the `hardhat.config.js` file.
-
-For more, see the [Hardhat Docs](https://hardhat.org/hardhat-runner/docs/getting-started#overview).

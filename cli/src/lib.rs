@@ -5,3 +5,6 @@
 pub mod commands;
 /// Utilities
 pub mod utils;
+
+/// Database Utils
+pub mod db;

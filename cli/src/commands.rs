@@ -1,16 +1,17 @@
-use crate::utils::{get_signing_provider, send_tx, set_tx_gas, CLIError};
+use crate::utils::{
+    check_address_string, get_signing_provider, parse_payouts_from_csv, parse_payouts_from_db,
+    send_tx, set_tx_gas, write_abi, CLIError,
+};
 use clap::{Parser, Subcommand};
-use contract_bindings::payout_factory::PayoutFactory;
+use contract_bindings::payout_factory_native_addr::PayoutFactoryNativeAddr as PayoutFactory;
+use contract_bindings::shared_types::FilAddress;
 use ethers::abi::Address;
 use ethers::prelude::Middleware;
-use ethers::types::U256;
 use log::info;
 use serde::{Deserialize, Serialize};
 use std::fs::read_to_string;
 use std::path::PathBuf;
 use std::str::FromStr;
-
-const ATTO_FIL: u128 = 10_u128.pow(18);
 
 #[allow(missing_docs)]
 #[derive(Parser, Debug, Clone, Deserialize, Serialize)]
@@ -30,11 +31,6 @@ pub struct Cli {
     retries: usize,
 }
 
-#[derive(Deserialize, Debug)]
-struct Payment {
-    payee: String,
-    shares: u128,
-}
 impl Cli {
     /// Create a configuration
     pub fn create() -> Result<Self, Box<dyn std::error::Error>> {
@@ -76,17 +72,21 @@ impl Cli {
             Commands::NewPayout {
                 factory_addr,
                 payout_csv,
+                db_deploy,
             } => {
                 let addr = Address::from_str(factory_addr)?;
-                let mut reader = csv::Reader::from_path(payout_csv)?;
-                let mut shares: Vec<U256> = Vec::new();
-                let mut payees: Vec<Address> = Vec::new();
-                for record in reader.deserialize() {
-                    let record: Payment = record?;
-                    let payee = record.payee.parse::<Address>()?;
-                    let share: U256 = (record.shares * ATTO_FIL).into();
-                    payees.push(payee);
-                    shares.push(share);
+                let payees;
+                let shares;
+
+                if *db_deploy {
+                    (payees, shares) = parse_payouts_from_db().await.unwrap();
+                } else {
+                    (payees, shares) = match payout_csv {
+                        Some(csv_path) => parse_payouts_from_csv(csv_path).await.unwrap(),
+                        None => {
+                            panic!("Either payout-csv or db-deployment must be defined as CLI args")
+                        }
+                    }
                 }
 
                 let factory = PayoutFactory::new(addr, client.clone().into());
@@ -103,7 +103,7 @@ impl Cli {
                     payout_tx.tx.gas().unwrap()
                 );
 
-                send_tx(&payout_tx.tx, client, self.retries).await?;
+                // send_tx(&payout_tx.tx, client, self.retries).await?;
             }
             Commands::Claim {
                 factory_addr,
@@ -111,7 +111,10 @@ impl Cli {
             } => {
                 let addr = Address::from_str(factory_addr)?;
                 let factory = PayoutFactory::new(addr, client.clone().into());
-                let claim_addr = Address::from_str(addr_to_claim.as_str())?;
+                let addr_to_claim = check_address_string(addr_to_claim)?;
+                let claim_addr = FilAddress {
+                    data: addr_to_claim.bytes.into(),
+                };
                 let mut claim_tx = factory.release_all(claim_addr);
                 let tx = claim_tx.tx.clone();
                 set_tx_gas(
@@ -124,6 +127,11 @@ impl Cli {
 
                 send_tx(&claim_tx.tx, client, self.retries).await?;
             }
+            Commands::WriteAbi { factory_addr } => {
+                let addr = Address::from_str(factory_addr)?;
+                let contract = PayoutFactory::new(addr, client.clone().into());
+                write_abi(contract);
+            }
         }
         Ok(())
     }
@@ -135,23 +143,35 @@ pub enum Commands {
     /// Deploys a new payout factory contract
     Deploy,
     /// Creates a new paymentsplitter based payout
-    #[command(arg_required_else_help = true)]
+    #[command()]
     NewPayout {
-        /// Path to the wallet mnemonic
-        #[arg(short = 'F', long)]
+        /// PayoutFactory ethereum address.
+        #[arg(short = 'F', long, required = true)]
         factory_addr: String,
-        // Path to csv payout file.
         #[arg(short = 'P', long)]
-        payout_csv: PathBuf,
+        payout_csv: Option<PathBuf>,
+        // Flag to determine if this is a db deployment.
+        #[arg(
+            short = 'D',
+            long,
+            // conflicts_with = "payout_csv",
+            default_value_t = false
+        )]
+        db_deploy: bool,
     },
     /// Claims all available funds for a given address
     #[command(arg_required_else_help = true)]
     Claim {
-        /// Path to the wallet mnemonic
+        /// PayoutFactory ethereum address.
         #[arg(short = 'F', long)]
         factory_addr: String,
         // Address to claim for
         #[arg(short = 'A', long)]
         addr_to_claim: String,
+    },
+    /// Writes abi of the PayoutFactory to a json file.
+    WriteAbi {
+        #[arg(short = 'W', long)]
+        factory_addr: String,
     },
 }
