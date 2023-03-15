@@ -189,6 +189,11 @@ cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace
 #### Write PayoutFactory Abi
 To write the `PayoutFactory` abi to a JSON file, you can use the `write-abi` command as such:
 
+```bash
+cd ./cli
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 write-abi -F $FACTORY_ADDRESS
+```
+
 ## Hardhat Integration
 
 This Foundry project has been integrated with Hardhat using the
