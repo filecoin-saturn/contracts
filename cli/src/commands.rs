@@ -103,7 +103,7 @@ impl Cli {
                     payout_tx.tx.gas().unwrap()
                 );
 
-                // send_tx(&payout_tx.tx, client, self.retries).await?;
+                send_tx(&payout_tx.tx, client, self.retries).await?;
             }
             Commands::Claim {
                 factory_addr,
