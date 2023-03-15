@@ -204,3 +204,5 @@ Please use the following steps to start developing with Hardhat after you have i
 3. Add tests in Javascript/Typescript to the `test` directory and run them using `npx hardhat test`.
 4. There's a **sample** `hardhat_deploy.js` script in the `script/` dir that can be used to deploy the `Evaluator` contract to a network of your choosing. To deploy it to the `Goerli` network, please rename the `env.example` file to `.env`, fill in the required varaiables, uncomment the `goerli` network config in `hardhat.config.js` and run `npx hardhat run script/hardhat_deploy.js --network goerli`.
 5. Add more tasks/config etc to the `hardhat.config.js` file.
+
+For more, see the [Hardhat Docs](https://hardhat.org/hardhat-runner/docs/getting-started#overview).
