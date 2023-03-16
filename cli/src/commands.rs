@@ -1,17 +1,19 @@
-use crate::utils::{
-    check_address_string, get_signing_provider, parse_payouts_from_csv, parse_payouts_from_db,
-    send_tx, set_tx_gas, write_abi, CLIError,
-};
 use clap::{Parser, Subcommand};
-use contract_bindings::payout_factory_native_addr::PayoutFactoryNativeAddr as PayoutFactory;
+use contract_bindings::payout_factory_native_addr::{
+    PayoutFactoryNativeAddr as PayoutFactory, PAYOUTFACTORYNATIVEADDR_ABI,
+};
 use contract_bindings::shared_types::FilAddress;
 use ethers::abi::Address;
 use ethers::prelude::Middleware;
+use ethers::utils::__serde_json::ser;
+use fevm_utils::{check_address_string, get_signing_provider, send_tx, set_tx_gas};
 use log::info;
 use serde::{Deserialize, Serialize};
-use std::fs::read_to_string;
+use std::fs::{self, read_to_string};
 use std::path::PathBuf;
 use std::str::FromStr;
+
+use crate::utils::{parse_payouts_from_csv, parse_payouts_from_db};
 
 #[allow(missing_docs)]
 #[derive(Parser, Debug, Clone, Deserialize, Serialize)]
@@ -31,6 +33,12 @@ pub struct Cli {
     retries: usize,
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum CLIError {
+    #[error("contract failed to deploy")]
+    ContractNotDeployed,
+}
+
 impl Cli {
     /// Create a configuration
     pub fn create() -> Result<Self, Box<dyn std::error::Error>> {
@@ -39,7 +47,7 @@ impl Cli {
 
     pub async fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
         let mnemonic = read_to_string(self.secret.clone())?;
-        let client = get_signing_provider(&mnemonic, &self.rpc_url).await;
+        let client = get_signing_provider(&mnemonic, &self.rpc_url).await?;
 
         let gas_price = client.provider().get_gas_price().await?;
 
@@ -127,10 +135,9 @@ impl Cli {
 
                 send_tx(&claim_tx.tx, client, self.retries).await?;
             }
-            Commands::WriteAbi { factory_addr } => {
-                let addr = Address::from_str(factory_addr)?;
-                let contract = PayoutFactory::new(addr, client.clone().into());
-                write_abi(contract);
+            Commands::WriteAbi { path } => {
+                let string_abi = ser::to_string(&PAYOUTFACTORYNATIVEADDR_ABI.clone())?;
+                fs::write(&path, string_abi)?;
             }
         }
         Ok(())
@@ -154,7 +161,7 @@ pub enum Commands {
         #[arg(
             short = 'D',
             long,
-            // conflicts_with = "payout_csv",
+            conflicts_with = "payout_csv",
             default_value_t = false
         )]
         db_deploy: bool,
@@ -169,9 +176,9 @@ pub enum Commands {
         #[arg(short = 'A', long)]
         addr_to_claim: String,
     },
-    /// Writes abi of the PayoutFactory to a json file.
+    /// Path to write the abi
     WriteAbi {
-        #[arg(short = 'W', long)]
-        factory_addr: String,
+        #[arg(short = 'P', long)]
+        path: String,
     },
 }

@@ -3,8 +3,9 @@
 
 /// CLI commands.
 pub mod commands;
-/// Utilities
-pub mod utils;
 
 /// Database Utils
 pub mod db;
+
+/// General cli Utils
+pub mod utils;

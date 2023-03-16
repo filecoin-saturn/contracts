@@ -191,5 +191,5 @@ To write the `PayoutFactory` abi to a JSON file, you can use the `write-abi` com
 
 ```bash
 cd ./cli
-cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 write-abi -F $FACTORY_ADDRESS
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 write-abi -P $ABI_PATH
 ```

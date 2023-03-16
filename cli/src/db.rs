@@ -25,7 +25,6 @@ use tokio_postgres::{Client, Config, Error, NoTls};
 ///
 /// ```
 ///
-
 async fn connect() -> Result<Client, Error> {
     dotenv().ok();
     let pg_pass = env::var("PG_PASSWORD").expect("PG_PASSWORD must be set");
