@@ -1,10 +1,10 @@
-use crate::utils::{check_address_string, get_signing_provider, send_tx, set_tx_gas, CLIError};
 use clap::{Parser, Subcommand};
 use contract_bindings::payout_factory_native_addr::PayoutFactoryNativeAddr as PayoutFactory;
 use contract_bindings::shared_types::FilAddress;
 use ethers::abi::Address;
 use ethers::prelude::Middleware;
 use ethers::types::U256;
+use fevm_utils::{check_address_string, get_signing_provider, send_tx, set_tx_gas};
 use log::info;
 use serde::{Deserialize, Serialize};
 use std::fs::read_to_string;
@@ -31,6 +31,12 @@ pub struct Cli {
     retries: usize,
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum CLIError {
+    #[error("contract failed to deploy")]
+    ContractNotDeployed,
+}
+
 #[derive(Deserialize, Debug)]
 struct Payment {
     payee: String,
@@ -44,7 +50,7 @@ impl Cli {
 
     pub async fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
         let mnemonic = read_to_string(self.secret.clone())?;
-        let client = get_signing_provider(&mnemonic, &self.rpc_url).await;
+        let client = get_signing_provider(&mnemonic, &self.rpc_url).await?;
 
         let gas_price = client.provider().get_gas_price().await?;
 

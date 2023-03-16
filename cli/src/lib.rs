@@ -3,5 +3,3 @@
 
 /// CLI commands.
 pub mod commands;
-/// Utilities
-pub mod utils;

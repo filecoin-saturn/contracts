@@ -390,19 +390,14 @@ dependencies = [
 name = "cli"
 version = "0.1.0"
 dependencies = [
- "async-recursion",
- "base32",
- "blake2",
  "clap",
  "colog",
  "contract-bindings",
  "csv",
  "ethers",
- "leb128",
+ "fevm-utils",
  "log",
- "reqwest",
  "serde",
- "serde_json",
  "thiserror",
  "tokio",
 ]
@@ -1039,6 +1034,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e51093e27b0797c359783294ca4f0a911c270184cb10f85783b118614a1501be"
 dependencies = [
  "instant",
+]
+
+[[package]]
+name = "fevm-utils"
+version = "0.1.0"
+source = "git+https://github.com/filecoin-saturn/rs-fevm-utils#f194eb403bcb23b78014f54c7f7bf5aa8bbd3cd4"
+dependencies = [
+ "async-recursion",
+ "base32",
+ "blake2",
+ "colog",
+ "ethers",
+ "leb128",
+ "log",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]
