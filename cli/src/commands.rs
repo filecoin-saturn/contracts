@@ -5,16 +5,16 @@ use contract_bindings::payout_factory_native_addr::{
 use contract_bindings::shared_types::FilAddress;
 use csv::Error as CsvError;
 use ethers::abi::Address;
-use ethers::prelude::{ContractInstance, Middleware};
+use ethers::prelude::Middleware;
 use ethers::types::U256;
-use fevm_utils::{check_address_string, get_signing_provider, send_tx, set_tx_gas, write_abi};
+use ethers::utils::__serde_json::ser;
+use fevm_utils::{check_address_string, get_signing_provider, send_tx, set_tx_gas};
 use log::info;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use std::fs::read_to_string;
+use std::fs::{self, read_to_string};
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::Arc;
 use tokio_postgres::Error as DbError;
 
 use crate::db::retrieve_payments;
@@ -191,13 +191,9 @@ impl Cli {
 
                 send_tx(&claim_tx.tx, client, self.retries).await?;
             }
-            Commands::WriteAbi { factory_addr } => {
-                let base_contract = ContractInstance::new(
-                    Address::from_str(factory_addr)?,
-                    PAYOUTFACTORYNATIVEADDR_ABI.clone(),
-                    Arc::new(client),
-                );
-                write_abi(base_contract, "./factoryAbi.json")?;
+            Commands::WriteAbi { path } => {
+                let string_abi = ser::to_string(&PAYOUTFACTORYNATIVEADDR_ABI.clone())?;
+                fs::write(&path, string_abi)?;
             }
         }
         Ok(())
@@ -236,9 +232,9 @@ pub enum Commands {
         #[arg(short = 'A', long)]
         addr_to_claim: String,
     },
-    /// Writes abi of the PayoutFactory to a json file.
+    /// Path to write the abi
     WriteAbi {
-        #[arg(short = 'W', long)]
-        factory_addr: String,
+        #[arg(short = 'P', long)]
+        path: String,
     },
 }
