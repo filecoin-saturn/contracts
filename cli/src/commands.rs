@@ -4,14 +4,15 @@ use contract_bindings::shared_types::FilAddress;
 use ethers::abi::Address;
 use ethers::prelude::Middleware;
 use ethers::types::U256;
-use fevm_utils::{check_address_string, get_signing_provider, send_tx, set_tx_gas};
+use fevm_utils::{
+    check_address_string, get_signing_provider, parse_payouts_from_csv, parse_payouts_from_db,
+    send_tx, set_tx_gas, write_abi,
+};
 use log::info;
 use serde::{Deserialize, Serialize};
 use std::fs::read_to_string;
 use std::path::PathBuf;
 use std::str::FromStr;
-
-const ATTO_FIL: u128 = 10_u128.pow(18);
 
 #[allow(missing_docs)]
 #[derive(Parser, Debug, Clone, Deserialize, Serialize)]
@@ -83,21 +84,21 @@ impl Cli {
             Commands::NewPayout {
                 factory_addr,
                 payout_csv,
+                db_deploy,
             } => {
                 let addr = Address::from_str(factory_addr)?;
-                let mut reader = csv::Reader::from_path(payout_csv)?;
-                let mut shares: Vec<U256> = Vec::new();
-                let mut payees: Vec<FilAddress> = Vec::new();
-                for record in reader.deserialize() {
-                    let record: Payment = record?;
-                    let addr = check_address_string(&record.payee)?;
+                let payees;
+                let shares;
 
-                    let payee = FilAddress {
-                        data: addr.bytes.into(),
-                    };
-                    let share: U256 = (record.shares * ATTO_FIL).into();
-                    payees.push(payee);
-                    shares.push(share);
+                if *db_deploy {
+                    (payees, shares) = parse_payouts_from_db().await.unwrap();
+                } else {
+                    (payees, shares) = match payout_csv {
+                        Some(csv_path) => parse_payouts_from_csv(csv_path).await.unwrap(),
+                        None => {
+                            panic!("Either payout-csv or db-deployment must be defined as CLI args")
+                        }
+                    }
                 }
 
                 let factory = PayoutFactory::new(addr, client.clone().into());
@@ -138,6 +139,11 @@ impl Cli {
 
                 send_tx(&claim_tx.tx, client, self.retries).await?;
             }
+            Commands::WriteAbi { factory_addr } => {
+                let addr = Address::from_str(factory_addr)?;
+                let contract = PayoutFactory::new(addr, client.clone().into());
+                write_abi(contract, "./factoryAbi.json");
+            }
         }
         Ok(())
     }
@@ -149,23 +155,35 @@ pub enum Commands {
     /// Deploys a new payout factory contract
     Deploy,
     /// Creates a new paymentsplitter based payout
-    #[command(arg_required_else_help = true)]
+    #[command()]
     NewPayout {
-        /// Path to the wallet mnemonic
-        #[arg(short = 'F', long)]
+        /// PayoutFactory ethereum address.
+        #[arg(short = 'F', long, required = true)]
         factory_addr: String,
-        // Path to csv payout file.
         #[arg(short = 'P', long)]
-        payout_csv: PathBuf,
+        payout_csv: Option<PathBuf>,
+        // Flag to determine if this is a db deployment.
+        #[arg(
+            short = 'D',
+            long,
+            // conflicts_with = "payout_csv",
+            default_value_t = false
+        )]
+        db_deploy: bool,
     },
     /// Claims all available funds for a given address
     #[command(arg_required_else_help = true)]
     Claim {
-        /// Path to the wallet mnemonic
+        /// PayoutFactory ethereum address.
         #[arg(short = 'F', long)]
         factory_addr: String,
         // Address to claim for
         #[arg(short = 'A', long)]
         addr_to_claim: String,
+    },
+    /// Writes abi of the PayoutFactory to a json file.
+    WriteAbi {
+        #[arg(short = 'W', long)]
+        factory_addr: String,
     },
 }

@@ -3,3 +3,6 @@
 
 /// CLI commands.
 pub mod commands;
+
+/// Database Utils
+pub mod db;
