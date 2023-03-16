@@ -161,7 +161,7 @@ pub enum Commands {
         #[arg(
             short = 'D',
             long,
-            // conflicts_with = "payout_csv",
+            conflicts_with = "payout_csv",
             default_value_t = false
         )]
         db_deploy: bool,
