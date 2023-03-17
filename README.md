@@ -141,6 +141,7 @@ If you want to use a Ledger Wallet, you can do so but only with the Filecoin mai
 2. Ensure your Ledger wallet is connected and unlocked and the `Ethereum` app is open on it.
 3. Ensure Ledger Live is open and the `Ethereum` app is open on it.
 4. Ensure that the Filecoin mainnet FIL address/EVM address that corresponds with your Ledger Ethereum address has funds in it.
+5. Ensure that the `blind_signing` option is turned on in the Ethereum App in Ledger.
 ---
 
 To use the bindings as scripts to deploy and interact with contracts first create a `./secrets/secret` file within `./cli` containing your mnemonic string (note this should only be used for testing purposes !).
