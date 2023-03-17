@@ -8,7 +8,7 @@ contract-bindings = { path= "./bindings" }
 clap = { version = "4.0.32", features = ["derive"] }
 thiserror = "1.0.38"
 ethers = { git = "https://github.com/gakonst/ethers-rs", default-features = false, rev = 'ee5e3e52', features = ["abigen", "ledger"]  }
-fevm-utils = { git = "https://github.com/filecoin-saturn/rs-fevm-utils", rev="5d3a75d6b718bd107e88cb56f558ee8a569d4bfb" }
+fevm-utils = { git = "https://github.com/filecoin-saturn/rs-fevm-utils", rev="be8382de4a351ab175e2dca470ce9043f7ce928a" }
 tokio = { version = "1.17.0", features = ["macros"] }
 serde = "1.0.152"
 log = { version = "0.4.17" }

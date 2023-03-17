@@ -210,7 +210,6 @@ async fn new_payout<S: Middleware + 'static>(
         }
     }
 
-    println!("bye");
     let factory = PayoutFactory::new(addr, client.clone());
     let mut payout_tx = factory.payout(payees, shares);
     let tx = payout_tx.tx.clone();
@@ -219,7 +218,6 @@ async fn new_payout<S: Middleware + 'static>(
         client.estimate_gas(&tx, None).await?,
         gas_price,
     );
-    println!("hello");
 
     info!(
         "estimated payout gas cost {:#?}",
