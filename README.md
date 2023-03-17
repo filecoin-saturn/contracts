@@ -142,7 +142,16 @@ cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace
 
 > **Note:** The `--retries` parameter sets a number of times to poll a pending transaction before considering it as having failed. Because of the differences in block times between Filecoin / Hyperspace and Ethereum, `ethers-rs` can sometimes timeout prematurely _before_ a transaction has truly failed or succeeded (`ethers-rs` has been built with Ethereum in mind). `--retries` has a default value of 10, which empirically we have found to result in successful transactions.
 
+
 #### Payment Splitter Deployments
+
+Make sure your deployed factory has sufficient funds for the subsequent payouts. You can fund it using (assuming your wallet has sufficient FIL): 
+
+```bash 
+cd ./cli
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 fund -F $FACTORY_ADDRESS -A $PAYOUT_AMOUNT
+```
+
 ##### Using a CSV file:
 To deploy a new `PaymentSplitter` from a deployed `PayoutFactory` contract using a CSV file:
 - Set an env var called `FACTORY_ADDRESS` with the address of the deployed `PayoutFactory`.

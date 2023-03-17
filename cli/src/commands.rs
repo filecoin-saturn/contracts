@@ -5,6 +5,8 @@ use contract_bindings::payout_factory_native_addr::{
 use contract_bindings::shared_types::FilAddress;
 use ethers::abi::Address;
 use ethers::prelude::Middleware;
+use ethers::types::transaction::eip2718::TypedTransaction;
+use ethers::types::{Eip1559TransactionRequest, U256};
 use ethers::utils::__serde_json::ser;
 use fevm_utils::{check_address_string, get_signing_provider, send_tx, set_tx_gas};
 use log::info;
@@ -135,6 +137,30 @@ impl Cli {
 
                 send_tx(&claim_tx.tx, client, self.retries).await?;
             }
+            Commands::Fund {
+                factory_addr,
+                amount,
+            } => {
+                let addr = Address::from_str(factory_addr)?;
+
+                // craft the tx (Filecoin doesn't support legacy transactions)
+                let mut fund_tx: TypedTransaction = Eip1559TransactionRequest::new()
+                    .to(addr)
+                    .value(amount)
+                    .from(client.address())
+                    .into(); // specify the `from` field so that the client knows which account to use
+
+                let tx = fund_tx.clone();
+                set_tx_gas(
+                    &mut fund_tx,
+                    client.estimate_gas(&tx, None).await?,
+                    gas_price,
+                );
+
+                info!("estimated fund gas cost {:#?}", fund_tx.gas().unwrap());
+
+                send_tx(&fund_tx, client, self.retries).await?;
+            }
             Commands::WriteAbi { path } => {
                 let string_abi = ser::to_string(&PAYOUTFACTORYNATIVEADDR_ABI.clone())?;
                 fs::write(&path, string_abi)?;
@@ -175,6 +201,16 @@ pub enum Commands {
         // Address to claim for
         #[arg(short = 'A', long)]
         addr_to_claim: String,
+    },
+    /// Fund a factory contract
+    #[command(arg_required_else_help = true)]
+    Fund {
+        /// PayoutFactory ethereum address.
+        #[arg(short = 'F', long)]
+        factory_addr: String,
+        // Amount to send
+        #[arg(short = 'A', long)]
+        amount: U256,
     },
     /// Path to write the abi
     WriteAbi {
