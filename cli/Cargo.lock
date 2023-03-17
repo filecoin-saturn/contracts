@@ -1279,7 +1279,7 @@ dependencies = [
 [[package]]
 name = "fevm-utils"
 version = "0.1.0"
-source = "git+https://github.com/filecoin-saturn/rs-fevm-utils?rev=be8382de4a351ab175e2dca470ce9043f7ce928a#be8382de4a351ab175e2dca470ce9043f7ce928a"
+source = "git+https://github.com/filecoin-saturn/rs-fevm-utils#506aebc4c72ae94c4044e92175dd0c564a648de9"
 dependencies = [
  "async-recursion",
  "base32",
