@@ -101,6 +101,7 @@ impl Cli {
                 factory_addr,
                 payout_csv,
                 db_deploy,
+                date,
             } => {
                 if self.secret.is_some() {
                     let client = get_wallet(self.secret.unwrap(), provider).await?;
@@ -111,6 +112,7 @@ impl Cli {
                         factory_addr,
                         payout_csv,
                         db_deploy,
+                        date,
                     )
                     .await?;
                 } else {
@@ -123,6 +125,7 @@ impl Cli {
                         factory_addr,
                         payout_csv,
                         db_deploy,
+                        date,
                     )
                     .await?;
                 }
@@ -243,13 +246,16 @@ async fn new_payout<S: Middleware + 'static>(
     factory_addr: &String,
     payout_csv: &Option<PathBuf>,
     db_deploy: &bool,
+    date: &String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let addr = Address::from_str(factory_addr)?;
     let payees;
     let shares;
 
     if *db_deploy {
-        (payees, shares) = parse_payouts_from_db().await.unwrap();
+        (payees, shares) = parse_payouts_from_db(&date.as_str(), &factory_addr.as_str())
+            .await
+            .unwrap();
     } else {
         (payees, shares) = match payout_csv {
             Some(csv_path) => parse_payouts_from_csv(csv_path).await.unwrap(),
@@ -319,13 +325,11 @@ pub enum Commands {
         #[arg(short = 'P', long)]
         payout_csv: Option<PathBuf>,
         // Flag to determine if this is a db deployment.
-        #[arg(
-            short = 'D',
-            long,
-            conflicts_with = "payout_csv",
-            default_value_t = false
-        )]
+        #[arg(long, conflicts_with = "payout_csv", default_value_t = false)]
         db_deploy: bool,
+        // Date for the payout period month.
+        #[arg(short = 'D', long, default_value = "")]
+        date: String,
     },
     /// Claims all available funds for a given address
     #[command(arg_required_else_help = true)]
