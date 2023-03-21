@@ -7,8 +7,9 @@ use ethers::abi::Address;
 use ethers::core::k256::ecdsa::SigningKey;
 use ethers::middleware::SignerMiddleware;
 use ethers::prelude::{Http, Middleware, Provider, U256};
-use ethers::types::transaction::eip2718::TypedTransaction;
 use ethers::signers::Wallet;
+use ethers::types::transaction::eip2718::TypedTransaction;
+use ethers::types::Eip1559TransactionRequest;
 use ethers::utils::__serde_json::ser;
 use fevm_utils::{
     check_address_string, get_ledger_signing_provider, get_provider, get_wallet_signing_provider,
@@ -156,8 +157,8 @@ impl Cli {
                 factory_addr,
                 amount,
             } => {
+                let client = get_wallet(self.secret.unwrap(), provider).await?;
                 let addr = Address::from_str(factory_addr)?;
-
                 // craft the tx (Filecoin doesn't support legacy transactions)
                 let mut fund_tx: TypedTransaction = Eip1559TransactionRequest::new()
                     .to(addr)
