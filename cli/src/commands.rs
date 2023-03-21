@@ -13,7 +13,8 @@ use std::fs::{self, read_to_string};
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use crate::utils::{parse_payouts_from_csv, parse_payouts_from_db};
+use crate::db::{get_payment_records, get_payment_records_for_finance, PayoutRecords};
+use crate::utils::{parse_payouts_from_csv, parse_payouts_from_db, write_payout_csv};
 
 #[allow(missing_docs)]
 #[derive(Parser, Debug, Clone, Deserialize, Serialize)]
@@ -87,7 +88,9 @@ impl Cli {
                 let shares;
 
                 if *db_deploy {
-                    (payees, shares) = parse_payouts_from_db().await.unwrap();
+                    (payees, shares) = parse_payouts_from_db("2023-03-02".into(), &factory_addr)
+                        .await
+                        .unwrap();
                 } else {
                     (payees, shares) = match payout_csv {
                         Some(csv_path) => parse_payouts_from_csv(csv_path).await.unwrap(),
@@ -139,6 +142,28 @@ impl Cli {
                 let string_abi = ser::to_string(&PAYOUTFACTORYNATIVEADDR_ABI.clone())?;
                 fs::write(&path, string_abi)?;
             }
+            Commands::GenerateMonthlyPayouts {
+                date,
+                factory_address,
+            } => {
+                let PayoutRecords { payees, shares } =
+                    get_payment_records_for_finance(date.as_str(), factory_address)
+                        .await
+                        .unwrap();
+
+                let csv_title = format!("Saturn-Finance-Payouts-{}.csv", date);
+                let path = PathBuf::from_str(&csv_title.as_str()).unwrap();
+                write_payout_csv(&path, &payees, &shares).unwrap();
+
+                let PayoutRecords { payees, shares } =
+                    get_payment_records(date.as_str(), false).await.unwrap();
+
+                let payout_sum: f64 = shares.iter().sum();
+                info!("Sum from payouts {:#?}", payout_sum);
+                let csv_title = format!("Saturn-Payouts-{}.csv", date);
+                let path = PathBuf::from_str(&csv_title.as_str()).unwrap();
+                write_payout_csv(&path, &payees, &shares).unwrap();
+            }
         }
         Ok(())
     }
@@ -176,9 +201,21 @@ pub enum Commands {
         #[arg(short = 'A', long)]
         addr_to_claim: String,
     },
-    /// Path to write the abi
+    /// Writes the abi of the PayouFactory contract.
+    #[command(arg_required_else_help = true)]
     WriteAbi {
+        /// Path to write the abi
         #[arg(short = 'P', long)]
         path: String,
+    },
+    /// Generates monthly payout and stores relevant csv's.
+    #[command(arg_required_else_help = true)]
+    GenerateMonthlyPayouts {
+        /// Date formatted YYYY-MM-DD
+        #[arg(short = 'P', long)]
+        date: String,
+        /// PayoutFactory ethereum address.
+        #[arg(short = 'F', long)]
+        factory_address: String,
     },
 }
