@@ -12,5 +12,4 @@ echidna-corpus/*
 **/**/target
 **/**/secrets
 node_modules
-
 **/**/build
