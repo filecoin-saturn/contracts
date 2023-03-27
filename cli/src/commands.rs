@@ -203,7 +203,16 @@ impl Cli {
 
                 let payout_sum: f64 = shares.iter().sum();
                 info!("Sum from payouts {:#?}", payout_sum);
-                let csv_title = format!("Saturn-Payouts-{}.csv", date);
+                let csv_title = format!("Saturn-Global-Payouts-{}.csv", date);
+                let path = PathBuf::from_str(&csv_title.as_str()).unwrap();
+                write_payout_csv(&path, &payees, &shares).unwrap();
+
+                let PayoutRecords { payees, shares } =
+                    get_payment_records(date.as_str(), true).await.unwrap();
+
+                let payout_sum: f64 = shares.iter().sum();
+                info!("Sum from cassini only payouts {:#?}", payout_sum);
+                let csv_title = format!("Saturn-Cassini-Payouts-{}.csv", date);
                 let path = PathBuf::from_str(&csv_title.as_str()).unwrap();
                 write_payout_csv(&path, &payees, &shares).unwrap();
             }

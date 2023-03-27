@@ -103,10 +103,7 @@ fn format_date(date: &str) -> Result<DateTime<Utc>, Error> {
 
 /// Retrieves and aggregates payment information from the `payment_aggregation`
 /// table.
-pub async fn get_payment_records(
-    date: &str,
-    include_cassini: bool,
-) -> Result<PayoutRecords, Error> {
+pub async fn get_payment_records(date: &str, cassini_only: bool) -> Result<PayoutRecords, Error> {
     let client = connect().await.unwrap();
 
     let date = format_date(date).unwrap();
@@ -128,7 +125,7 @@ pub async fn get_payment_records(
         GROUP BY fil_wallet_address
         ORDER BY sum(fil_earned) desc
     ",
-            &[&include_cassini, &date],
+            &[&cassini_only, &date],
         )
         .await
         .unwrap();

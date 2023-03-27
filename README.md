@@ -132,8 +132,8 @@ forge bind  --select "(?:^|\W)PayoutFactoryNativeAddr|PaymentSplitterNativeAddr(
 ## Cli
 
 ---
-**Note:** 
-  
+**Note:**
+
  The cli command examples given below assume you are using a local wallet.
 
 If you want to use a Ledger Wallet, you can do so but only with the Filecoin mainnet.
@@ -158,9 +158,9 @@ cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace
 
 #### Payment Splitter Deployments
 
-Make sure your deployed factory has sufficient funds for the subsequent payouts. You can fund it using (assuming your wallet has sufficient FIL): 
+Make sure your deployed factory has sufficient funds for the subsequent payouts. You can fund it using (assuming your wallet has sufficient FIL):
 
-```bash 
+```bash
 cd ./cli
 cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 fund -F $FACTORY_ADDRESS -A $PAYOUT_AMOUNT
 ```
@@ -215,3 +215,10 @@ To write the `PayoutFactory` abi to a JSON file, you can use the `write-abi` com
 cd ./cli
 cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 write-abi -P $ABI_PATH
 ```
+
+#### Write Payout CSVs:
+The `generate-monthly-payouts` command generates the monthly payout csv's for saturn. For the operation of the cassini group, this command generates three CSV files:
+
+- A `Finance` specific file that that parses payouts such that the last column is the address of the `PayoutFactory` smart contract and represents the sum of all the Cassini member earnings.
+- A `Global` payout file that represents the payouts of each invidividual filecoin address. This will be used for record keeping.
+- A `Cassini` specific file that represents the payouts of each cassini member. This will be used to deploy a PaymentSplitter contract.
