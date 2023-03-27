@@ -222,3 +222,32 @@ The `generate-monthly-payouts` command generates the monthly payout csv's for sa
 - A `Finance` specific file that that parses payouts such that the last column is the address of the `PayoutFactory` smart contract and represents the sum of all the Cassini member earnings.
 - A `Global` payout file that represents the payouts of each invidividual filecoin address. This will be used for record keeping.
 - A `Cassini` specific file that represents the payouts of each cassini member. This will be used to deploy a PaymentSplitter contract.
+
+### Hardhat Integration
+
+This Foundry project has been integrated with Hardhat using the
+`hardhat-foundry` [plugin](https://hardhat.org/hardhat-runner/docs/advanced/hardhat-and-foundry).
+This integration enables using Hardhat on top of the Foundry project structure.
+
+Note that dependencies still need to be installed using forge(`forge install`) as we want to manage dependencies as git modules rather than npm modules.
+
+### Setup Hardhat
+```
+npm i
+```
+### Compile contracts
+```
+npx hardhat compile
+```
+### Deploy the Evaluator contract to the local Hardhat network
+Example hardhat deploy script provided at `script/hardhat_evaluator_deploy.js`
+```
+npx hardhat run --network hardhat script/hardhat_evaluator_deploy.js
+```
+### Deploy a contract to the Goerli testnet
+
+1. Rename the `.env.example` to `.env` and fill in the required values for the environment variables
+2. Uncomment the `goerli` network config in the `hardhat.config.js` file
+3. Run `npx hardhat run script/hardhat_evaluator_deploy.js --network goerli`
+
+For more stuff you can do with Hardhat, see the [Hardhat Docs](https://hardhat.org/hardhat-runner/docs/getting-started#overview).
