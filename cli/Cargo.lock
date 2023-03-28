@@ -854,6 +854,8 @@ dependencies = [
  "ethabi",
  "ethers",
  "fevm-utils",
+ "fvm_shared",
+ "hex",
  "log",
  "num-traits",
  "once_cell",
@@ -1033,16 +1035,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec182b0ca2f35d8fc196cf3404988fd8b8c739a4d270ff118a398feb0cbec1ca"
 dependencies = [
  "unicode-segmentation",
-]
-
-[[package]]
-name = "copy_to_output"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "852f0666911dba71637503eb8b973ae382521a3433ed9c56e384581c8c3585fc"
-dependencies = [
- "anyhow",
- "fs_extra",
 ]
 
 [[package]]
@@ -2129,14 +2121,13 @@ dependencies = [
 [[package]]
 name = "fevm-utils"
 version = "0.1.0"
-source = "git+https://github.com/filecoin-saturn/rs-fevm-utils?branch=aa/executor-edits#7f4009eb739d6d57c539fb0d2cf5587d7d74f68d"
+source = "git+https://github.com/filecoin-saturn/rs-fevm-utils?branch=ac/executor-edits#a9a89cf9de40906d7006db50800d5a7115d6611e"
 dependencies = [
  "async-recursion",
  "base32",
  "blake2",
  "cid",
  "colog",
- "copy_to_output",
  "ethers",
  "fil_actor_datacap",
  "fil_actor_eam",
@@ -2544,12 +2535,6 @@ dependencies = [
  "libc",
  "winapi",
 ]
-
-[[package]]
-name = "fs_extra"
-version = "1.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
 
 [[package]]
 name = "funty"
