@@ -1,3 +1,4 @@
+use chrono::{Datelike, Month};
 use clap::{Parser, Subcommand};
 use contract_bindings::payout_factory_native_addr::{
     PayoutFactoryNativeAddr as PayoutFactory, PAYOUTFACTORYNATIVEADDR_ABI,
@@ -16,14 +17,17 @@ use fevm_utils::{
     send_tx, set_tx_gas,
 };
 use log::info;
+use num_traits::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fs::{self, read_to_string};
+use std::io::{self, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use crate::utils::{parse_payouts_from_csv, parse_payouts_from_db};
+use crate::db::{get_payment_records, get_payment_records_for_finance, PayoutRecords};
+use crate::utils::{format_date, parse_payouts_from_csv, parse_payouts_from_db, write_payout_csv};
 
 #[allow(missing_docs)]
 #[derive(Parser, Debug, Clone, Deserialize, Serialize)]
@@ -100,6 +104,7 @@ impl Cli {
                 factory_addr,
                 payout_csv,
                 db_deploy,
+                date,
             } => {
                 if self.secret.is_some() {
                     let client = get_wallet(self.secret.unwrap(), provider).await?;
@@ -110,6 +115,7 @@ impl Cli {
                         factory_addr,
                         payout_csv,
                         db_deploy,
+                        date,
                     )
                     .await?;
                 } else {
@@ -122,6 +128,7 @@ impl Cli {
                         factory_addr,
                         payout_csv,
                         db_deploy,
+                        date,
                     )
                     .await?;
                 }
@@ -181,6 +188,55 @@ impl Cli {
                 let string_abi = ser::to_string(&PAYOUTFACTORYNATIVEADDR_ABI.clone())?;
                 fs::write(&path, string_abi)?;
             }
+            Commands::GenerateMonthlyPayout {
+                date,
+                factory_address,
+            } => {
+                let formatted_date = format_date(date).unwrap();
+
+                let mut confirmation = String::new();
+
+                let month =
+                    Month::from_u32(formatted_date.month()).expect("Invalid MM format in date");
+                info!(
+                    "Type 'yes' to confirm you are generating payouts for {} {}",
+                    month.name(),
+                    formatted_date.year(),
+                );
+                let _ = io::stdout().flush();
+                let _ = std::io::stdin().read_line(&mut confirmation).unwrap();
+
+                if confirmation.trim().ne(&String::from("yes")) {
+                    panic!("User rejected current date");
+                }
+
+                let PayoutRecords { payees, shares } =
+                    get_payment_records_for_finance(date.as_str(), factory_address)
+                        .await
+                        .unwrap();
+
+                let csv_title = format!("Saturn-Finance-Payouts-{}.csv", date);
+                let path = PathBuf::from_str(&csv_title.as_str()).unwrap();
+                write_payout_csv(&path, &payees, &shares).unwrap();
+
+                let PayoutRecords { payees, shares } =
+                    get_payment_records(date.as_str(), false).await.unwrap();
+
+                let payout_sum: f64 = shares.iter().sum();
+                info!("Sum from payouts {:#?}", payout_sum);
+                let csv_title = format!("Saturn-Global-Payouts-{}.csv", date);
+                let path = PathBuf::from_str(&csv_title.as_str()).unwrap();
+                write_payout_csv(&path, &payees, &shares).unwrap();
+
+                let PayoutRecords { payees, shares } =
+                    get_payment_records(date.as_str(), true).await.unwrap();
+
+                let payout_sum: f64 = shares.iter().sum();
+                info!("Sum from cassini only payouts {:#?}", payout_sum);
+                let csv_title = format!("Saturn-Cassini-Payouts-{}.csv", date);
+                let path = PathBuf::from_str(&csv_title.as_str()).unwrap();
+                write_payout_csv(&path, &payees, &shares).unwrap();
+            }
         }
         Ok(())
     }
@@ -220,13 +276,16 @@ async fn new_payout<S: Middleware + 'static>(
     factory_addr: &String,
     payout_csv: &Option<PathBuf>,
     db_deploy: &bool,
+    date: &String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let addr = Address::from_str(factory_addr)?;
     let payees;
     let shares;
 
     if *db_deploy {
-        (payees, shares) = parse_payouts_from_db().await.unwrap();
+        (payees, shares) = parse_payouts_from_db(&date.as_str(), &factory_addr.as_str())
+            .await
+            .unwrap();
     } else {
         (payees, shares) = match payout_csv {
             Some(csv_path) => parse_payouts_from_csv(csv_path).await.unwrap(),
@@ -296,13 +355,11 @@ pub enum Commands {
         #[arg(short = 'P', long)]
         payout_csv: Option<PathBuf>,
         // Flag to determine if this is a db deployment.
-        #[arg(
-            short = 'D',
-            long,
-            conflicts_with = "payout_csv",
-            default_value_t = false
-        )]
+        #[arg(long, conflicts_with = "payout_csv", default_value_t = false)]
         db_deploy: bool,
+        // Date for the payout period month.
+        #[arg(short = 'D', long, default_value = "")]
+        date: String,
     },
     /// Claims all available funds for a given address
     #[command(arg_required_else_help = true)]
@@ -326,7 +383,18 @@ pub enum Commands {
     },
     /// Path to write the abi
     WriteAbi {
+        /// Path to write the abi
         #[arg(short = 'P', long)]
         path: String,
+    },
+    /// Generates monthly payout and stores relevant csv's.
+    #[command(arg_required_else_help = true)]
+    GenerateMonthlyPayout {
+        /// Date formatted YYYY-MM
+        #[arg(short = 'D', long)]
+        date: String,
+        /// PayoutFactory ethereum address.
+        #[arg(short = 'F', long)]
+        factory_address: String,
     },
 }

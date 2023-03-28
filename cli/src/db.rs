@@ -1,9 +1,8 @@
-use chrono::offset::Utc;
+use crate::utils::format_date;
 use dotenv::dotenv;
 use rust_decimal::prelude::{Decimal, ToPrimitive};
 use std::env;
-use tokio_postgres::{Client, Config, Error, NoTls};
-
+use tokio_postgres::{Client, Config, Error, NoTls, Row};
 /// Creates a new postgres database connection and returns a Postgres Client.
 ///
 /// Requires the following environment variables to be setup:
@@ -56,28 +55,22 @@ async fn connect() -> Result<Client, Error> {
     Ok(client)
 }
 
-pub async fn retrieve_payments() -> Result<(Vec<String>, Vec<f64>), Error> {
-    let client = connect().await.unwrap();
+#[derive(Debug, Clone)]
+pub struct PayoutRecords {
+    pub payees: Vec<String>,
+    pub shares: Vec<f64>,
+}
 
-    let date = Utc::now();
-    let res = client
-        .query(
-            "
-       SELECT fil_wallet_address, fil_earned from payments
-       INNER JOIN
-            nodes on payments.node_id = nodes.id
-            AND cassini = true
-            AND core = false
-            AND banned_at is NULL
-       WHERE time_stamp <= $1::TIMESTAMP WITH TIME ZONE
-    ",
-            &[&date],
-        )
-        .await
-        .unwrap();
-
+/// Formats a vector tokio_postgres `Row` type to native rust types.
+///
+/// Specifically, the postgres `Row` must be formatted such that:
+///     - The first index is a postgres text/char type.
+///     - The second row is a postgres numeric/int (any variant) / float type.
+///
+fn format_payout_res(res: Vec<Row>) -> Result<PayoutRecords, Error> {
     let mut payees: Vec<String> = Vec::new();
     let mut shares: Vec<f64> = Vec::new();
+
     for row in res {
         let payee: String = row.get(0);
         let share: Decimal = row.get(1);
@@ -85,5 +78,79 @@ pub async fn retrieve_payments() -> Result<(Vec<String>, Vec<f64>), Error> {
         payees.push(payee.to_string());
         shares.push(share.to_f64().unwrap());
     }
-    Ok((payees, shares))
+    Ok(PayoutRecords { payees, shares })
+}
+
+/// Retrieves and aggregates payment information from the `payment_aggregation`
+/// table.
+pub async fn get_payment_records(date: &str, cassini_only: bool) -> Result<PayoutRecords, Error> {
+    let client = connect().await.unwrap();
+
+    let date = format_date(date).unwrap();
+
+    let res = client
+        .query(
+            "
+        SELECT
+            fil_wallet_address, sum(fil_earned)
+        FROM  payment_aggregation
+        INNER JOIN
+            nodes on payment_aggregation.node_id = nodes.id
+            AND core = false
+            AND cassini = $1
+            AND banned_at is NULL
+        WHERE
+            date_trunc('month',time_stamp)::date =
+                date_trunc('month', $2::TIMESTAMP WITH TIME ZONE)::date
+        GROUP BY fil_wallet_address
+        ORDER BY sum(fil_earned) desc
+    ",
+            &[&cassini_only, &date],
+        )
+        .await
+        .unwrap();
+
+    let payout = format_payout_res(res).unwrap();
+
+    Ok(payout)
+}
+
+/// Generates the final monthly payout for each month.
+///
+/// Currently includes a final row with the factory address and total for cassini members.
+pub async fn get_payment_records_for_finance(
+    date: &str,
+    factory_address: &str,
+) -> Result<PayoutRecords, Error> {
+    let client = connect().await.unwrap();
+    let mut node_payouts = get_payment_records(date, true).await.unwrap();
+    let date = format_date(date).unwrap();
+
+    let res = client
+        .query(
+            "
+            SELECT
+                sum(fil_earned)
+            FROM  payment_aggregation
+            INNER JOIN
+                nodes on payment_aggregation.node_id = nodes.id
+                AND core = false
+                AND cassini = true
+                AND banned_at is NULL
+            WHERE
+                date_trunc('month',time_stamp)::date =
+                    date_trunc('month', $1::TIMESTAMP WITH TIME ZONE)::date
+            ",
+            &[&date],
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.len(), 1);
+    let cassini_payout: Decimal = res[0].get(0);
+
+    node_payouts.payees.push(factory_address.to_string());
+    node_payouts.shares.push(cassini_payout.to_f64().unwrap());
+
+    Ok(node_payouts)
 }
