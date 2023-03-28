@@ -1,5 +1,9 @@
+use std::error::Error;
 use std::path::PathBuf;
 
+use chrono::DateTime;
+use chrono::NaiveDate;
+use chrono::Utc;
 use contract_bindings::shared_types::FilAddress;
 use ethers::types::U256;
 
@@ -67,6 +71,26 @@ pub async fn parse_payouts_from_db(
         .map(|share| U256::try_from((share * &*ATTO_FIL) as u128).unwrap())
         .collect();
     Ok((payees, shares))
+}
+
+/// Formats a date str to an equivalent Postgres compatible date type using DateTime.
+///
+/// Usage:
+/// ```no_run
+/// let date = "1916-04-30";
+/// let formatted_date = format_date(&date);
+/// println!("Formatted Date: {:#?}", formatted_date);
+///
+/// ```
+pub fn format_date(date: &str) -> Result<DateTime<Utc>, Box<dyn Error>> {
+    let date_str = date.to_owned() + "-01";
+    let date = NaiveDate::parse_from_str(date_str.as_str(), "%Y-%m-%d").unwrap();
+    let naive_datetime = date.and_hms_opt(0, 0, 0);
+    let date = match naive_datetime {
+        None => panic!("Error parsing date"),
+        Some(naive_datetime) => DateTime::<Utc>::from_utc(naive_datetime, Utc),
+    };
+    Ok(date)
 }
 
 pub fn write_payout_csv(

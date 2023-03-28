@@ -1,3 +1,4 @@
+use chrono::{Datelike, Month};
 use clap::{Parser, Subcommand};
 use contract_bindings::payout_factory_native_addr::{
     PayoutFactoryNativeAddr as PayoutFactory, PAYOUTFACTORYNATIVEADDR_ABI,
@@ -16,15 +17,17 @@ use fevm_utils::{
     send_tx, set_tx_gas,
 };
 use log::info;
+use num_traits::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fs::{self, read_to_string};
+use std::io::{self, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 
 use crate::db::{get_payment_records, get_payment_records_for_finance, PayoutRecords};
-use crate::utils::{parse_payouts_from_csv, parse_payouts_from_db, write_payout_csv};
+use crate::utils::{format_date, parse_payouts_from_csv, parse_payouts_from_db, write_payout_csv};
 
 #[allow(missing_docs)]
 #[derive(Parser, Debug, Clone, Deserialize, Serialize)]
@@ -185,10 +188,28 @@ impl Cli {
                 let string_abi = ser::to_string(&PAYOUTFACTORYNATIVEADDR_ABI.clone())?;
                 fs::write(&path, string_abi)?;
             }
-            Commands::GenerateMonthlyPayouts {
+            Commands::GenerateMonthlyPayout {
                 date,
                 factory_address,
             } => {
+                let formatted_date = format_date(date).unwrap();
+
+                let mut confirmation = String::new();
+
+                let month =
+                    Month::from_u32(formatted_date.month()).expect("Invalid MM format in date");
+                info!(
+                    "Type 'yes' to confirm you are generating payouts for {} {}",
+                    month.name(),
+                    formatted_date.year(),
+                );
+                let _ = io::stdout().flush();
+                let _ = std::io::stdin().read_line(&mut confirmation).unwrap();
+
+                if confirmation.trim().ne(&String::from("yes")) {
+                    panic!("User rejected current date");
+                }
+
                 let PayoutRecords { payees, shares } =
                     get_payment_records_for_finance(date.as_str(), factory_address)
                         .await
@@ -368,9 +389,9 @@ pub enum Commands {
     },
     /// Generates monthly payout and stores relevant csv's.
     #[command(arg_required_else_help = true)]
-    GenerateMonthlyPayouts {
-        /// Date formatted YYYY-MM-DD
-        #[arg(short = 'P', long)]
+    GenerateMonthlyPayout {
+        /// Date formatted YYYY-MM
+        #[arg(short = 'D', long)]
         date: String,
         /// PayoutFactory ethereum address.
         #[arg(short = 'F', long)]

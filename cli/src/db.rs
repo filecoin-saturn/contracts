@@ -1,9 +1,8 @@
-use chrono::{offset::Utc, DateTime, Datelike, NaiveDate};
+use crate::utils::format_date;
 use dotenv::dotenv;
 use rust_decimal::prelude::{Decimal, ToPrimitive};
 use std::env;
 use tokio_postgres::{Client, Config, Error, NoTls, Row};
-
 /// Creates a new postgres database connection and returns a Postgres Client.
 ///
 /// Requires the following environment variables to be setup:
@@ -80,25 +79,6 @@ fn format_payout_res(res: Vec<Row>) -> Result<PayoutRecords, Error> {
         shares.push(share.to_f64().unwrap());
     }
     Ok(PayoutRecords { payees, shares })
-}
-
-/// Formats a date str to an equivalent Postgres compatible date type using DateTime.
-///
-/// Usage:
-/// ```no_run
-/// let date = "1916-04-30";
-/// let formatted_date = format_date(&date);
-/// println!("Formatted Date: {:#?}", formatted_date);
-///
-/// ```
-fn format_date(date: &str) -> Result<DateTime<Utc>, Error> {
-    let date = NaiveDate::parse_from_str(date, "%Y-%m-%d").unwrap();
-    let naive_datetime = date.and_hms_opt(0, 0, 0);
-    let date = match naive_datetime {
-        None => panic!("Error parsing date"),
-        Some(naive_datetime) => DateTime::<Utc>::from_utc(naive_datetime, Utc),
-    };
-    Ok(date)
 }
 
 /// Retrieves and aggregates payment information from the `payment_aggregation`

@@ -222,3 +222,10 @@ The `generate-monthly-payouts` command generates the monthly payout csv's for sa
 - A `Finance` specific file that that parses payouts such that the last column is the address of the `PayoutFactory` smart contract and represents the sum of all the Cassini member earnings.
 - A `Global` payout file that represents the payouts of each invidividual filecoin address. This will be used for record keeping.
 - A `Cassini` specific file that represents the payouts of each cassini member. This will be used to deploy a PaymentSplitter contract.
+
+To run the command:
+
+```bash
+cd ./cli
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 generate-monthly-payout -D 2023-01 -F $FILECOIN_FACTORY_ADRESS
+```
