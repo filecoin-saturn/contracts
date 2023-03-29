@@ -236,7 +236,6 @@ pub enum Commands {
 
 #[cfg(test)]
 pub mod cli_tests {
-
     use crate::utils::ATTO_FIL;
     use assert_cmd::prelude::*;
     use assert_fs::fixture::FileWriteStr;
