@@ -12,7 +12,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     env:
       TEST_RPC_URL: ${{secrets.TEST_RPC_URL}}
       TEST_MNEMONIC: ${{secrets.TEST_MNEMONIC}}
@@ -26,10 +26,10 @@ jobs:
       - uses: actions/checkout@v2
         with:
           submodules: recursive
-      - name: Install OpenCL
-        run: |
-          sudo apt update
-          sudo apt install ocl-icd-opencl-dev
+#       - name: Install OpenCL
+#         run: |
+#           sudo apt update
+#           sudo apt install ocl-icd-opencl-dev
       # - name: Setup upterm session
       #   uses: lhotari/action-upterm@v1
       - name: Build
