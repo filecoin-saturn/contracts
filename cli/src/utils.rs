@@ -1,23 +1,40 @@
 use std::error::Error;
 use std::path::PathBuf;
 
-use chrono::DateTime;
-use chrono::NaiveDate;
-use chrono::Utc;
+use chrono::{DateTime, Datelike, Month, NaiveDate, Utc};
 use contract_bindings::shared_types::FilAddress;
-use ethers::types::U256;
+use ethers::types::{Eip1559TransactionRequest, U256};
 
-use fevm_utils::check_address_string;
-use serde::Deserialize;
-use tokio_postgres::Error as DbError;
-
-use crate::db::get_payment_records_for_finance;
-use crate::db::PayoutRecords;
 use csv::{Error as CsvError, Writer};
+use tokio_postgres::Error as DbError;
 
 use once_cell::sync::Lazy;
 
-static ATTO_FIL: Lazy<f64> = Lazy::new(|| 10_f64.powf(18.0));
+use contract_bindings::payout_factory_native_addr::PayoutFactoryNativeAddr as PayoutFactory;
+use ethers::abi::Address;
+use ethers::core::k256::ecdsa::SigningKey;
+use ethers::middleware::SignerMiddleware;
+use ethers::prelude::{Http, Middleware, Provider};
+use ethers::signers::Wallet;
+use ethers::types::transaction::eip2718::TypedTransaction;
+use fevm_utils::{check_address_string, get_wallet_signing_provider, send_tx, set_tx_gas};
+use log::info;
+use num_traits::FromPrimitive;
+use serde::Deserialize;
+use std::fs::read_to_string;
+use std::io::{self, Write};
+use std::str::FromStr;
+use std::sync::Arc;
+
+use crate::db::{get_payment_records, get_payment_records_for_finance, PayoutRecords};
+
+pub static ATTO_FIL: Lazy<f64> = Lazy::new(|| 10_f64.powf(18.0));
+
+#[derive(thiserror::Error, Debug)]
+pub enum CLIError {
+    #[error("contract failed to deploy")]
+    ContractNotDeployed,
+}
 
 #[derive(Deserialize, Debug)]
 #[allow(non_snake_case)]
@@ -26,6 +43,11 @@ struct Payment {
     FIL: f64,
 }
 
+/// Parses payouts from a csv file.
+///
+/// CSV file formatted as such:
+///    Recipient,FIL
+///    f1...,5
 pub async fn parse_payouts_from_csv(
     payout_csv: &PathBuf,
 ) -> Result<(Vec<FilAddress>, Vec<U256>), CsvError> {
@@ -48,6 +70,7 @@ pub async fn parse_payouts_from_csv(
     Ok((payees, shares))
 }
 
+/// Retrieves and parses payouts from a Postgres database.
 pub async fn parse_payouts_from_db(
     date: &str,
     factory_address: &str,
@@ -93,6 +116,7 @@ pub fn format_date(date: &str) -> Result<DateTime<Utc>, Box<dyn Error>> {
     Ok(date)
 }
 
+/// Writes a payout csv to a given path locally.
 pub fn write_payout_csv(
     path: &PathBuf,
     payees: &Vec<String>,
@@ -109,4 +133,190 @@ pub fn write_payout_csv(
     }
 
     Ok(())
+}
+
+pub async fn claim_earnings<S: Middleware + 'static>(
+    client: Arc<S>,
+    retries: usize,
+    gas_price: U256,
+    factory_addr: &String,
+    addr_to_claim: &String,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let addr = Address::from_str(factory_addr)?;
+    let factory = PayoutFactory::new(addr, client.clone());
+    let addr_to_claim = check_address_string(addr_to_claim)?;
+    let claim_addr = FilAddress {
+        data: addr_to_claim.bytes.into(),
+    };
+    let mut claim_tx = factory.release_all(claim_addr);
+    let tx = claim_tx.tx.clone();
+    set_tx_gas(
+        &mut claim_tx.tx,
+        client.estimate_gas(&tx, None).await?,
+        gas_price,
+    );
+
+    info!("estimated claim gas cost {:#?}", claim_tx.tx.gas().unwrap());
+
+    send_tx(&claim_tx.tx, client, retries).await?;
+    Ok(())
+}
+
+pub async fn new_payout<S: Middleware + 'static>(
+    client: Arc<S>,
+    retries: usize,
+    gas_price: U256,
+    factory_addr: &String,
+    payout_csv: &Option<PathBuf>,
+    db_deploy: &bool,
+    date: &String,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let addr = Address::from_str(factory_addr)?;
+    let payees;
+    let shares;
+
+    if *db_deploy {
+        (payees, shares) = parse_payouts_from_db(&date.as_str(), &factory_addr.as_str())
+            .await
+            .unwrap();
+    } else {
+        (payees, shares) = match payout_csv {
+            Some(csv_path) => parse_payouts_from_csv(csv_path).await.unwrap(),
+            None => {
+                panic!("Either payout-csv or db-deployment must be defined as CLI args")
+            }
+        }
+    }
+
+    let factory = PayoutFactory::new(addr, client.clone());
+    let mut payout_tx = factory.payout(payees, shares);
+    let tx = payout_tx.tx.clone();
+    set_tx_gas(
+        &mut payout_tx.tx,
+        client.estimate_gas(&tx, None).await?,
+        gas_price,
+    );
+
+    info!(
+        "estimated payout gas cost {:#?}",
+        payout_tx.tx.gas().unwrap()
+    );
+
+    send_tx(&payout_tx.tx, client, retries).await?;
+    Ok(())
+}
+
+async fn get_wallet(
+    secret: PathBuf,
+    provider: Provider<Http>,
+) -> Result<Arc<SignerMiddleware<Arc<Provider<Http>>, Wallet<SigningKey>>>, Box<dyn Error>> {
+    let mnemonic = read_to_string(secret)?;
+    let client = get_wallet_signing_provider(provider, &mnemonic).await?;
+    let client = Arc::new(client);
+    Ok(client)
+}
+
+pub async fn fund_factory_contract(
+    factory_addr: &String,
+    amount: &i128,
+    secret: Option<PathBuf>,
+    provider: Provider<Http>,
+    retries: usize,
+    gas_price: U256,
+) {
+    let client = get_wallet(secret.unwrap(), provider).await.unwrap();
+    let addr = Address::from_str(factory_addr).unwrap();
+    // craft the tx (Filecoin doesn't support legacy transactions)
+    let amount = U256::from(*amount);
+    let mut fund_tx: TypedTransaction = Eip1559TransactionRequest::new()
+        .to(addr)
+        .value(amount)
+        .from(client.address())
+        .into(); // specify the `from` field so that the client knows which account to use
+
+    let tx = fund_tx.clone();
+    set_tx_gas(
+        &mut fund_tx,
+        client.estimate_gas(&tx, None).await.unwrap(),
+        gas_price,
+    );
+
+    info!("estimated fund gas cost {:#?}", fund_tx.gas().unwrap());
+
+    send_tx(&fund_tx, client, retries).await.unwrap();
+}
+
+pub async fn deploy_factory_contract<S: Middleware + 'static>(
+    client: Arc<S>,
+    retries: usize,
+    gas_price: U256,
+    address: Address,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut contract = PayoutFactory::deploy(client.clone(), address)?;
+    let tx = contract.deployer.tx.clone();
+    set_tx_gas(
+        &mut contract.deployer.tx,
+        client.estimate_gas(&tx, None).await?,
+        gas_price,
+    );
+
+    info!(
+        "estimated deployment gas cost: {:#?}",
+        contract.deployer.tx.gas().unwrap()
+    );
+
+    let receipt = send_tx(&contract.deployer.tx, client, retries).await?;
+
+    let address = receipt
+        .contract_address
+        .ok_or(CLIError::ContractNotDeployed)?;
+
+    // !! Changing this info statement will result in test failure
+    info!("contract address: {:#?}", address);
+
+    Ok(())
+}
+
+pub async fn generate_monthly_payout(date: &String, factory_address: &String) {
+    let formatted_date = format_date(date).unwrap();
+
+    let mut confirmation = String::new();
+
+    let month = Month::from_u32(formatted_date.month()).expect("Invalid MM format in date");
+    info!(
+        "Type 'yes' to confirm you are generating payouts for {} {}",
+        month.name(),
+        formatted_date.year(),
+    );
+    let _ = io::stdout().flush();
+    let _ = std::io::stdin().read_line(&mut confirmation).unwrap();
+
+    if confirmation.trim().ne(&String::from("yes")) {
+        panic!("User rejected current date");
+    }
+
+    let PayoutRecords { payees, shares } =
+        get_payment_records_for_finance(date.as_str(), factory_address)
+            .await
+            .unwrap();
+
+    let csv_title = format!("Saturn-Finance-Payouts-{}.csv", date);
+    let path = PathBuf::from_str(&csv_title.as_str()).unwrap();
+    write_payout_csv(&path, &payees, &shares).unwrap();
+
+    let PayoutRecords { payees, shares } = get_payment_records(date.as_str(), false).await.unwrap();
+
+    let payout_sum: f64 = shares.iter().sum();
+    info!("Sum from payouts {:#?}", payout_sum);
+    let csv_title = format!("Saturn-Global-Payouts-{}.csv", date);
+    let path = PathBuf::from_str(&csv_title.as_str()).unwrap();
+    write_payout_csv(&path, &payees, &shares).unwrap();
+
+    let PayoutRecords { payees, shares } = get_payment_records(date.as_str(), true).await.unwrap();
+
+    let payout_sum: f64 = shares.iter().sum();
+    info!("Sum from cassini only payouts {:#?}", payout_sum);
+    let csv_title = format!("Saturn-Cassini-Payouts-{}.csv", date);
+    let path = PathBuf::from_str(&csv_title.as_str()).unwrap();
+    write_payout_csv(&path, &payees, &shares).unwrap();
 }
