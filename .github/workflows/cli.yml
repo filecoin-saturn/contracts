@@ -13,6 +13,10 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      TEST_RPC_URL: ${{secrets.TEST_RPC_URL}}
+      TEST_MNEMONIC: ${{secrets.TEST_MNEMONIC}}
+      TEST_FACTORY_ADDRESS: ${{secrets.TEST_FACTORY_ADDRESS}}
     steps:
     - uses: actions/checkout@v2
     - name: Build
