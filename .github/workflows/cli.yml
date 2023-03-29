@@ -22,4 +22,4 @@ jobs:
     - name: Run tests
       run: |
         cd cli
-        cargo test cli  -- --nocapture --test-threads 1 --verbose
+        cargo test cli  -- --nocapture --test-threads 1
