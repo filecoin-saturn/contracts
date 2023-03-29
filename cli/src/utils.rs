@@ -82,7 +82,7 @@ pub async fn parse_payouts_from_db(
     let payees = payees
         .iter()
         .map(|payee| {
-            let addr = check_address_string(&payee).unwrap();
+            let addr = check_address_string(payee).unwrap();
             FilAddress {
                 data: addr.bytes.into(),
             }
@@ -139,8 +139,8 @@ pub async fn claim_earnings<S: Middleware + 'static>(
     client: Arc<S>,
     retries: usize,
     gas_price: U256,
-    factory_addr: &String,
-    addr_to_claim: &String,
+    factory_addr: &str,
+    addr_to_claim: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let addr = Address::from_str(factory_addr)?;
     let factory = PayoutFactory::new(addr, client.clone());
@@ -166,19 +166,17 @@ pub async fn new_payout<S: Middleware + 'static>(
     client: Arc<S>,
     retries: usize,
     gas_price: U256,
-    factory_addr: &String,
+    factory_addr: &str,
     payout_csv: &Option<PathBuf>,
     db_deploy: &bool,
-    date: &String,
+    date: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let addr = Address::from_str(factory_addr)?;
     let payees;
     let shares;
 
     if *db_deploy {
-        (payees, shares) = parse_payouts_from_db(&date.as_str(), &factory_addr.as_str())
-            .await
-            .unwrap();
+        (payees, shares) = parse_payouts_from_db(date, factory_addr).await.unwrap();
     } else {
         (payees, shares) = match payout_csv {
             Some(csv_path) => parse_payouts_from_csv(csv_path).await.unwrap(),
@@ -217,7 +215,7 @@ async fn get_wallet(
 }
 
 pub async fn fund_factory_contract(
-    factory_addr: &String,
+    factory_addr: &str,
     amount: &i128,
     secret: Option<PathBuf>,
     provider: Provider<Http>,
@@ -277,7 +275,7 @@ pub async fn deploy_factory_contract<S: Middleware + 'static>(
     Ok(())
 }
 
-pub async fn generate_monthly_payout(date: &String, factory_address: &String) {
+pub async fn generate_monthly_payout(date: &str, factory_address: &str) {
     let formatted_date = format_date(date).unwrap();
 
     let mut confirmation = String::new();
@@ -295,28 +293,27 @@ pub async fn generate_monthly_payout(date: &String, factory_address: &String) {
         panic!("User rejected current date");
     }
 
-    let PayoutRecords { payees, shares } =
-        get_payment_records_for_finance(date.as_str(), factory_address)
-            .await
-            .unwrap();
+    let PayoutRecords { payees, shares } = get_payment_records_for_finance(date, factory_address)
+        .await
+        .unwrap();
 
     let csv_title = format!("Saturn-Finance-Payouts-{}.csv", date);
-    let path = PathBuf::from_str(&csv_title.as_str()).unwrap();
+    let path = PathBuf::from_str(csv_title.as_str()).unwrap();
     write_payout_csv(&path, &payees, &shares).unwrap();
 
-    let PayoutRecords { payees, shares } = get_payment_records(date.as_str(), false).await.unwrap();
+    let PayoutRecords { payees, shares } = get_payment_records(date, false).await.unwrap();
 
     let payout_sum: f64 = shares.iter().sum();
     info!("Sum from payouts {:#?}", payout_sum);
     let csv_title = format!("Saturn-Global-Payouts-{}.csv", date);
-    let path = PathBuf::from_str(&csv_title.as_str()).unwrap();
+    let path = PathBuf::from_str(csv_title.as_str()).unwrap();
     write_payout_csv(&path, &payees, &shares).unwrap();
 
-    let PayoutRecords { payees, shares } = get_payment_records(date.as_str(), true).await.unwrap();
+    let PayoutRecords { payees, shares } = get_payment_records(date, true).await.unwrap();
 
     let payout_sum: f64 = shares.iter().sum();
     info!("Sum from cassini only payouts {:#?}", payout_sum);
     let csv_title = format!("Saturn-Cassini-Payouts-{}.csv", date);
-    let path = PathBuf::from_str(&csv_title.as_str()).unwrap();
+    let path = PathBuf::from_str(csv_title.as_str()).unwrap();
     write_payout_csv(&path, &payees, &shares).unwrap();
 }

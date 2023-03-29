@@ -18,7 +18,7 @@ static FACTORY_ADDRESS: Lazy<Mutex<String>> = Lazy::new(|| {
 
 static SECRETS_FILE: Lazy<NamedTempFile> = Lazy::new(|| {
     let file = assert_fs::NamedTempFile::new("secrets.txt").unwrap();
-    file.write_str(&MNEMONIC.as_str()).unwrap();
+    file.write_str(MNEMONIC.as_str()).unwrap();
     file
 });
 
@@ -66,9 +66,9 @@ fn cli_1_deploy() -> Result<(), Box<dyn std::error::Error>> {
         .expect("Ok");
 
     // extract the CLI terminal output and parse to string
-    let out_data = String::from_utf8(output.clone().stderr).unwrap();
+    let out_data = String::from_utf8(output.stderr).unwrap();
     println!("{}", out_data);
-    let addr = extract_contract_addr(&out_data.as_str());
+    let addr = extract_contract_addr(out_data.as_str());
     let mut data = FACTORY_ADDRESS.lock().unwrap();
     *data = addr;
     Ok(())
@@ -133,7 +133,7 @@ fn cli_4_claim() -> Result<(), Box<dyn std::error::Error>> {
         "--factory-addr",
         factory_addr,
         "--addr-to-claim",
-        &RECIPIENT_ADDRESS,
+        RECIPIENT_ADDRESS,
     ];
     args.append(&mut new_payout_args);
 
