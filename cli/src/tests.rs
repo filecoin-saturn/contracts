@@ -1,5 +1,3 @@
-// Note this useful idiom: importing names from outer (for mod tests) scope.
-// use super::*;
 const WASM_COMPILED_PATH: &str = "./build/tests/PayoutFactoryNativeAddr.bin";
 const ABI_PATH: &str = "./build/tests/PayoutFactoryNativeAddr.abi";
 
