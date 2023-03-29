@@ -18,6 +18,11 @@ jobs:
       TEST_MNEMONIC: ${{secrets.TEST_MNEMONIC}}
       TEST_FACTORY_ADDRESS: ${{secrets.TEST_FACTORY_ADDRESS}}
     steps:
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly-2022-11-03
+          override: true
+          components: rustfmt, clippy
       - uses: actions/checkout@v2
         with:
           submodules: recursive
@@ -25,8 +30,6 @@ jobs:
         run: |
           sudo apt update
           sudo apt install ocl-icd-opencl-dev
-      - name: Setup upterm session
-        uses: lhotari/action-upterm@v1
       - name: Build
         run: |
           cd cli
