@@ -12,7 +12,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     env:
       TEST_RPC_URL: ${{secrets.TEST_RPC_URL}}
       TEST_MNEMONIC: ${{secrets.TEST_MNEMONIC}}
