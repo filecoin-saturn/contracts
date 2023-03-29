@@ -25,6 +25,8 @@ jobs:
         run: |
           sudo apt update
           sudo apt install ocl-icd-opencl-dev
+      - name: Setup upterm session
+        uses: lhotari/action-upterm@v1
       - name: Build
         run: |
           cd cli
