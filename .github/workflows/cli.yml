@@ -1,0 +1,29 @@
+name: Tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths: ["cli/**",".github/workflows/cli.yml"]
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      TEST_RPC_URL: ${{secrets.TEST_RPC_URL}}
+      TEST_MNEMONIC: ${{secrets.TEST_MNEMONIC}}
+      TEST_FACTORY_ADDRESS: ${{secrets.TEST_FACTORY_ADDRESS}}
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build
+      run: |
+        cd cli
+        cargo build
+    - name: Run tests
+      run: |
+        cd cli
+        cargo test cli  -- --nocapture --test-threads 1

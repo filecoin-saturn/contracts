@@ -39,7 +39,7 @@ async fn connect() -> Result<Client, Error> {
         .password(pg_pass)
         .host(pg_host.as_str())
         .dbname(pg_db.as_str())
-        .port(pg_port.into())
+        .port(pg_port)
         .user(pg_user.as_str())
         .application_name("Saturn Contract Payments")
         .connect(NoTls)
