@@ -19,6 +19,8 @@ jobs:
       TEST_FACTORY_ADDRESS: ${{secrets.TEST_FACTORY_ADDRESS}}
     steps:
       - uses: actions/checkout@v2
+        with:
+          submodules: recursive
       - name: Install OpenCL
         run: |
           sudo apt update
