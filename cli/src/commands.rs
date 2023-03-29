@@ -305,7 +305,7 @@ pub mod cli_tests {
 
         // extract the CLI terminal output and parse to string
         let out_data = String::from_utf8(output.clone().stderr).unwrap();
-
+        println!("{}", out_data);
         let addr = extract_contract_addr(&out_data.as_str());
         let mut data = FACTORY_ADDRESS.lock().unwrap();
         *data = addr;

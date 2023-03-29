@@ -22,7 +22,7 @@ jobs:
     - name: Build
       run: |
         cd cli
-        cargo build --verbose
+        cargo build
     - name: Run tests
       run: |
         cd cli
