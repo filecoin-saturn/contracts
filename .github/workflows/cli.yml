@@ -35,6 +35,7 @@ jobs:
       - name: Build
         run: |
           cd cli
+          rustc --version
           cargo build -vv
       - name: Run tests
         run: |
