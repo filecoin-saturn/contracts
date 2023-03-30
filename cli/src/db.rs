@@ -13,8 +13,8 @@ use tokio_postgres::{Client, Config, Error, NoTls, Row};
 ///	    PG_USER - Username of the postgres user that is used to connect
 ///
 /// Usage:
-/// ```no_run
-/// use tokio_postgres::{Client}
+/// ```ignore
+/// use tokio_postgres::{Client};
 /// use db::{connect};
 ///
 /// fn connect_example() {

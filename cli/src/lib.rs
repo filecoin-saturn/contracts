@@ -9,6 +9,3 @@ pub mod db;
 
 /// General cli Utils
 pub mod utils;
-
-// #[cfg(test)]
-// pub mod hyperspace_test;
