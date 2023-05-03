@@ -4,7 +4,7 @@ use ethers::core::k256::ecdsa::SigningKey;
 use ethers::middleware::SignerMiddleware;
 use ethers::prelude::{Http, Middleware, Provider};
 use ethers::signers::Wallet;
-use ethers::utils::__serde_json::ser;
+use ethers::utils::__serde_json::{ser, Value};
 use fevm_utils::{get_ledger_signing_provider, get_provider, get_wallet_signing_provider};
 use log::info;
 use serde::{Deserialize, Serialize};
@@ -41,6 +41,12 @@ pub enum CLIError {
     #[error("contract failed to deploy")]
     ContractNotDeployed,
 }
+
+// #[derive(Debug, Deserialize, Clone, Serialize)]
+// struct ApproveParams(&str, &str, &str);
+
+// #[derive(Debug, Deserialize, Clone, Serialize)]
+// struct ProposeParams(&str, &str, &str, i128, &str, &str);
 
 impl Cli {
     /// Create a configuration
@@ -171,6 +177,52 @@ impl Cli {
                 date,
                 factory_address,
             } => generate_monthly_payout(date, factory_address).await,
+            Commands::MultisigInspect { actor_id } => {
+                let params: (&str, ()) = (actor_id.as_str(), ());
+                let result: Value = provider
+                    .request::<(&str, ()), Value>("Filecoin.StateReadState", params)
+                    .await
+                    .unwrap();
+                println!("{:#?}", result);
+            }
+            Commands::ProposeNewPayout {
+                actor_id,
+                factory_address,
+                proposer_address,
+            } => {
+                let params = (
+                    actor_id.as_str(),
+                    factory_address.as_str(),
+                    proposer_address.as_str(),
+                    0_i128,
+                    "",
+                    "",
+                );
+                let result: Value = provider
+                    .request::<(&str, &str, &str, i128, &str, &str), Value>(
+                        "Filecoin.MsigPropose",
+                        params,
+                    )
+                    .await
+                    .unwrap();
+                println!("{:#?}", result);
+            }
+            Commands::ApproveNewPayout {
+                actor_id,
+                transaction_id,
+                proposer_address,
+            } => {
+                let params = (
+                    actor_id.as_str(),
+                    transaction_id.as_str(),
+                    proposer_address.as_str(),
+                );
+                let result: Value = provider
+                    .request::<(&str, &str, &str), Value>("Filecoin.MsigApprove", params)
+                    .await
+                    .unwrap();
+                println!("{:#?}", result);
+            }
         }
         Ok(())
     }
@@ -231,5 +283,35 @@ pub enum Commands {
         /// PayoutFactory ethereum address.
         #[arg(short = 'F', long)]
         factory_address: String,
+    },
+    #[command(arg_required_else_help = true)]
+    MultisigInspect {
+        /// Multisig actor id
+        #[arg(short = 'A', long)]
+        actor_id: String,
+    },
+    #[command(arg_required_else_help = true)]
+    ProposeNewPayout {
+        /// Multisig actor id
+        #[arg(short = 'A', long)]
+        actor_id: String,
+        /// Payout Factory Filecoin Address
+        #[arg(short = 'F', long)]
+        factory_address: String,
+        /// Sender Filecoin Address
+        #[arg(short = 'S', long)]
+        proposer_address: String,
+    },
+    #[command(arg_required_else_help = true)]
+    ApproveNewPayout {
+        /// Multisig actor id
+        #[arg(short = 'A', long)]
+        actor_id: String,
+        /// Transaction Id
+        #[arg(short = 'T', long)]
+        transaction_id: String,
+        /// Proposer Address
+        #[arg(short = 'P', long)]
+        proposer_address: String,
     },
 }
