@@ -11,6 +11,8 @@ thiserror = "1.0.38"
 ethers = { git = "https://github.com/gakonst/ethers-rs", default-features = false, rev = 'ee5e3e52', features = ["abigen", "ledger"]  }
 fevm-utils = { git = "https://github.com/filecoin-saturn/rs-fevm-utils" }
 tokio = { version = "1.17.0", features = ["macros"] }
+filecoin-signer = { path= "./signer" }
+fvm_ipld_encoding = "0.3.3"
 serde = "1.0.152"
 log = { version = "0.4.17" }
 colog = { version = "1.1.0" }

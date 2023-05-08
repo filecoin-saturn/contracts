@@ -1,0 +1,26 @@
+[package]
+name = "extras"
+version = "0.1.0"
+authors = ["Zondax <info@zondax.ch>"]
+edition = "2018"
+license = "Apache-2.0"
+repository = "https://github.com/Zondax/filecoin-signing-tools"
+description ="Temporary lib used for compatibility with wasm"
+
+[dependencies]
+serde = { version = "1.0.136", features = ["derive"] }
+serde_json = "1.0"
+serde_alias = "0.0.2"
+
+fil_actor_cron = { version = "10.0.0", git = "https://github.com/filecoin-project/builtin-actors", tag = "v10.0.0" }
+fil_actor_init = { version = "10.0.0", git = "https://github.com/filecoin-project/builtin-actors", tag = "v10.0.0" }
+fil_actor_multisig = { version = "10.0.0", git = "https://github.com/filecoin-project/builtin-actors", tag = "v10.0.0" }
+fil_actor_paych = { version = "10.0.0", git = "https://github.com/filecoin-project/builtin-actors", tag = "v10.0.0" }
+fil_actor_miner = { version = "10.0.0", git = "https://github.com/filecoin-project/builtin-actors", tag = "v10.0.0" }
+
+fvm_shared = "3.0.0-alpha.20"
+cid = { version = "0.8.3", default-features = false, features = ["serde-codec"] }
+base64 = "0.13.0"
+
+fvm_ipld_encoding = "0.3.3"
+fvm_ipld_bitfield = "0.5.1"

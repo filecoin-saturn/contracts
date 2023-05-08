@@ -6,11 +6,17 @@ use ethers::prelude::{Http, Middleware, Provider};
 use ethers::signers::Wallet;
 use ethers::utils::__serde_json::{ser, Value};
 use fevm_utils::{get_ledger_signing_provider, get_provider, get_wallet_signing_provider};
+use filecoin_signer::PrivateKey;
+use fvm_ipld_encoding::RawBytes;
+use fvm_shared::bigint::BigInt;
+use fvm_shared::econ::TokenAmount;
+use fvm_shared::message::Message;
 use log::info;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fs::{self, read_to_string};
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use crate::utils::{
@@ -67,7 +73,8 @@ impl Cli {
         ) -> Result<Arc<SignerMiddleware<Arc<Provider<Http>>, Wallet<SigningKey>>>, Box<dyn Error>>
         {
             let mnemonic = read_to_string(secret)?;
-            let client = get_wallet_signing_provider(provider, &mnemonic).await?;
+            let client: SignerMiddleware<Arc<Provider<Http>>, Wallet<SigningKey>> =
+                get_wallet_signing_provider(provider, &mnemonic).await?;
             let client = Arc::new(client);
             Ok(client)
         }
@@ -191,18 +198,38 @@ impl Cli {
                 proposer_address,
             } => {
                 let params = (
-                    actor_id.as_str(),
-                    factory_address.as_str(),
-                    proposer_address.as_str(),
-                    0_i128,
-                    "",
+                    "f1mtkndd5nczhq4s7ld36a6m7sn2mcoxkpjyt57oq",
+                    3000000000_i128,
+                    0,
                     "",
                 );
-                let result: Value = provider
-                    .request::<(&str, &str, &str, i128, &str, &str), Value>(
-                        "Filecoin.MsigPropose",
-                        params,
+
+                let mm = Message {
+                    version: 0,
+                    to: fvm_shared::address::Address::from_str("f02183663").unwrap(),
+                    from: fvm_shared::address::Address::from_str(
+                        "f15lpcnqqr7cyemknve3wpeqhtniirwhhwguhkwky",
                     )
+                    .unwrap(),
+                    sequence: 1,
+                    value: TokenAmount::from_atto(BigInt::from_str("100000").unwrap()),
+                    gas_limit: 25000,
+                    gas_fee_cap: TokenAmount::from_atto(BigInt::from_str("1000000").unwrap()),
+                    gas_premium: TokenAmount::from_atto(BigInt::from_str("1000000").unwrap()),
+                    method_num: 2, // Propose is method no 2
+                    params: RawBytes::try_from(vec![]).unwrap(),
+                };
+
+                let private_key = String::try_from("insert private key");
+                let private_key: Result<PrivateKey, filecoin_signer::error::SignerError> =
+                    PrivateKey::try_from(private_key.unwrap());
+
+                let privy = private_key.unwrap();
+
+                println!("{:#?}", privy);
+
+                let result: Value = provider
+                    .request::<Message, Value>("Filecoin.MpoolPush", params)
                     .await
                     .unwrap();
                 println!("{:#?}", result);
