@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use super::json::serde_base64_vector;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(remote = "Signature", rename_all = "PascalCase")]
 pub struct SignatureAPI {
     #[serde(rename = "Type")]

@@ -235,6 +235,7 @@ pub fn key_recover(private_key: &PrivateKey, testnet: bool) -> Result<ExtendedKe
     }
 
     let address = network_str + &address.to_string()[1..];
+    println!("Address {:#?}", address);
 
     Ok(ExtendedKey {
         private_key: PrivateKey(secret_key.serialize()),
@@ -314,6 +315,7 @@ fn transaction_sign_secp56k1_raw(
     let message_ser = to_vec(message)?;
     let hash = cid::multihash::Code::Blake2b256.digest(&message_ser);
     let message_cid = cid::Cid::new_v1(DAG_CBOR, hash);
+    // println!("Message CID {:#?}", message_cid.hash());
     let message_digest =
         libsecp256k1::Message::parse_slice(&utils::blake2b_256(&message_cid.to_bytes()))?;
 

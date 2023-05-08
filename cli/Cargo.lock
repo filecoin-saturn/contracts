@@ -918,16 +918,19 @@ dependencies = [
  "ethabi",
  "ethers",
  "fevm-utils",
+ "fil_actor_multisig",
  "filecoin-signer",
  "fvm_ipld_encoding",
  "fvm_shared",
  "hex",
+ "libsecp256k1 0.6.0",
  "log",
  "num-traits",
  "once_cell",
  "regex",
  "rust_decimal",
  "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tokio-postgres",
@@ -5596,9 +5599,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.95"
+version = "1.0.96"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d721eca97ac802aa7777b701877c8004d950fc142651367300d21c1cc0194744"
+checksum = "057d394a50403bcac12672b2b18fb387ab6d289d957dab67dd201875391e52f1"
 dependencies = [
  "itoa",
  "ryu",
