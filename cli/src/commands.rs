@@ -51,12 +51,6 @@ pub enum CLIError {
     ContractNotDeployed,
 }
 
-// #[derive(Debug, Deserialize, Clone, Serialize)]
-// struct ApproveParams(&str, &str, &str);
-
-// #[derive(Debug, Deserialize, Clone, Serialize)]
-// struct ProposeParams(&str, &str, &str, i128, &str, &str);
-
 impl Cli {
     /// Create a configuration
     pub fn create() -> Result<Self, Box<dyn std::error::Error>> {
