@@ -6,7 +6,7 @@ use ethers::prelude::{Http, Middleware, Provider};
 use ethers::signers::Wallet;
 use ethers::utils::__serde_json::{ser, Value};
 use fevm_utils::{get_ledger_signing_provider, get_provider, get_wallet_signing_provider};
-use fil_actor_multisig::ProposeParams;
+use fil_actor_multisig::{ProposeParams, TxnID, TxnIDParams};
 use filecoin_signer::api::{MessageParams, MessageTxAPI};
 use filecoin_signer::{transaction_sign, PrivateKey};
 use fvm_ipld_encoding::RawBytes;
@@ -231,8 +231,6 @@ impl Cli {
 
                 let signature = transaction_sign(&message, &private_key).unwrap();
                 let signed_message: MessageTxAPI = MessageTxAPI::SignedMessage(signature);
-                // let string_signed_message = serde_json::to_string(&signed_message).unwrap();
-                // println!("{:#?}", string_signed_message);
 
                 let result: Value = provider
                     .request::<[MessageTxAPI; 1], Value>("Filecoin.MpoolPush", [signed_message])
@@ -243,17 +241,49 @@ impl Cli {
             Commands::ApproveNewPayout {
                 actor_id,
                 transaction_id,
-                proposer_address,
+                approver_address,
+                private_key,
             } => {
-                let params = (
-                    actor_id.as_str(),
-                    transaction_id.as_str(),
-                    proposer_address.as_str(),
-                );
+                let params: TxnIDParams = TxnIDParams {
+                    id: TxnID(i64::from_str(&transaction_id).unwrap()),
+                    proposal_hash: vec![],
+                };
+
+                let nonce = get_nonce(&approver_address, provider.clone()).await;
+
+                // TODO: Properly define what this value represents
+                let max_fee: &str = "100000000000000";
+
+                let mut message = Message {
+                    version: 0,
+                    to: FilecoinAddress::from_str(&actor_id).unwrap(),
+                    from: FilecoinAddress::from_str(&approver_address).unwrap(),
+                    sequence: nonce,
+                    value: TokenAmount::from_atto(BigInt::from_str("0").unwrap()),
+                    gas_limit: 0,
+                    gas_fee_cap: TokenAmount::from_atto(BigInt::from_str("0").unwrap()),
+                    gas_premium: TokenAmount::from_atto(BigInt::from_str("0").unwrap()),
+                    method_num: 3, // Approve is method no 3
+                    params: MessageParams::TxnIDParams(params).serialize().unwrap(),
+                };
+
+                let gas_info = get_gas_info(message.clone(), provider.clone(), max_fee).await;
+
+                message.gas_limit = gas_info.gas_limit;
+                message.gas_fee_cap = gas_info.gas_fee_cap;
+                message.gas_premium = gas_info.gas_premium;
+
+                let private_key_string = String::from(private_key.as_str());
+                let private_key = PrivateKey::try_from(private_key_string).unwrap();
+
+                let signature = transaction_sign(&message, &private_key).unwrap();
+                let signed_message: MessageTxAPI = MessageTxAPI::SignedMessage(signature);
+
                 let result: Value = provider
-                    .request::<(&str, &str, &str), Value>("Filecoin.MsigApprove", params)
+                    .request::<[MessageTxAPI; 1], Value>("Filecoin.MpoolPush", [signed_message])
                     .await
                     .unwrap();
+
                 println!("{:#?}", result);
             }
         }
@@ -346,8 +376,11 @@ pub enum Commands {
         /// Transaction Id
         #[arg(short = 'T', long)]
         transaction_id: String,
-        /// Proposer Address
+        /// Approver Address
         #[arg(short = 'P', long)]
-        proposer_address: String,
+        approver_address: String,
+        /// Sender SECP Prviate Key
+        #[arg(short = 'P', long)]
+        private_key: String,
     },
 }
