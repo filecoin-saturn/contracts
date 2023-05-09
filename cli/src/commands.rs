@@ -239,7 +239,7 @@ impl Cli {
                 println!("{:#?}", result);
             }
             Commands::ApproveNewPayout {
-                actor_id,
+                actor_address,
                 transaction_id,
                 approver_address,
                 private_key,
@@ -256,7 +256,7 @@ impl Cli {
 
                 let mut message = Message {
                     version: 0,
-                    to: FilecoinAddress::from_str(&actor_id).unwrap(),
+                    to: FilecoinAddress::from_str(&actor_address).unwrap(),
                     from: FilecoinAddress::from_str(&approver_address).unwrap(),
                     sequence: nonce,
                     value: TokenAmount::from_atto(BigInt::from_str("0").unwrap()),
@@ -372,12 +372,12 @@ pub enum Commands {
     ApproveNewPayout {
         /// Multisig actor id
         #[arg(short = 'A', long)]
-        actor_id: String,
+        actor_address: String,
         /// Transaction Id
         #[arg(short = 'T', long)]
         transaction_id: String,
         /// Approver Address
-        #[arg(short = 'P', long)]
+        #[arg(short = 'S', long)]
         approver_address: String,
         /// Sender SECP Prviate Key
         #[arg(short = 'P', long)]
