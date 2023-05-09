@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
 
@@ -6,6 +7,11 @@ use contract_bindings::shared_types::FilAddress;
 use ethers::types::{Eip1559TransactionRequest, U256};
 
 use csv::{Error as CsvError, Writer};
+use extras::json::tokenamount;
+use filecoin_signer::api::MessageTxAPI;
+use fvm_shared::address::Address as FilecoinAddress;
+use fvm_shared::econ::TokenAmount;
+use fvm_shared::message::Message;
 use tokio_postgres::Error as DbError;
 
 use once_cell::sync::Lazy;
@@ -20,7 +26,7 @@ use ethers::types::transaction::eip2718::TypedTransaction;
 use fevm_utils::{check_address_string, get_wallet_signing_provider, send_tx, set_tx_gas};
 use log::info;
 use num_traits::FromPrimitive;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::fs::read_to_string;
 use std::io::{self, Write};
 use std::str::FromStr;
@@ -316,4 +322,57 @@ pub async fn generate_monthly_payout(date: &str, factory_address: &str) {
     let csv_title = format!("Saturn-Cassini-Payouts-{}.csv", date);
     let path = PathBuf::from_str(csv_title.as_str()).unwrap();
     write_payout_csv(&path, &payees, &shares).unwrap();
+}
+
+#[derive(Debug)]
+pub struct TransactionGasInfo {
+    pub gas_limit: u64,
+    pub gas_fee_cap: TokenAmount,
+    pub gas_premium: TokenAmount,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct StateActorInfo {
+    #[serde(skip)]
+    pub code: HashMap<String, String>,
+    #[serde(skip)]
+    pub head: HashMap<String, String>,
+    #[serde(rename = "Balance", with = "tokenamount")]
+    pub balance: TokenAmount,
+    #[serde(rename = "Nonce")]
+    pub nonce: u64,
+}
+
+const GAS_LIMIT_MULTIPLIER: u64 = 150;
+
+pub async fn get_gas_info(
+    unsigned_message: Message,
+    provider: Provider<Http>,
+    max_fee: &str,
+) -> TransactionGasInfo {
+    let max_fee = HashMap::from([("MaxFee", max_fee)]);
+
+    let gas_info: MessageTxAPI = provider
+        .request::<(MessageTxAPI, HashMap<&str, &str>, ()), MessageTxAPI>(
+            "Filecoin.GasEstimateMessageGas",
+            (MessageTxAPI::Message(unsigned_message), max_fee, ()),
+        )
+        .await
+        .unwrap();
+
+    let gas_info = gas_info.get_message();
+    TransactionGasInfo {
+        gas_limit: gas_info.gas_limit * (GAS_LIMIT_MULTIPLIER / 100),
+        gas_premium: gas_info.gas_premium,
+        gas_fee_cap: gas_info.gas_fee_cap,
+    }
+}
+
+pub async fn get_nonce(address: &str, provider: Provider<Http>) -> u64 {
+    let result: StateActorInfo = provider
+        .request::<(&str, ()), StateActorInfo>("Filecoin.StateGetActor", (address, ()))
+        .await
+        .unwrap();
+
+    result.nonce
 }

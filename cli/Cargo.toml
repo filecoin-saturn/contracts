@@ -12,6 +12,7 @@ ethers = { git = "https://github.com/gakonst/ethers-rs", default-features = fals
 fevm-utils = { git = "https://github.com/filecoin-saturn/rs-fevm-utils" }
 tokio = { version = "1.17.0", features = ["macros"] }
 filecoin-signer = { path= "./signer" }
+extras = { path = "./extras" }
 fvm_ipld_encoding = "0.3.3"
 libsecp256k1 = "0.6"
 serde = "1.0.152"

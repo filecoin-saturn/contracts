@@ -8,13 +8,12 @@ use ethers::utils::__serde_json::{ser, Value};
 use fevm_utils::{get_ledger_signing_provider, get_provider, get_wallet_signing_provider};
 use fil_actor_multisig::ProposeParams;
 use filecoin_signer::api::{MessageParams, MessageTxAPI};
-use filecoin_signer::{key_recover, transaction_sign, PrivateKey};
+use filecoin_signer::{transaction_sign, PrivateKey};
 use fvm_ipld_encoding::RawBytes;
-use fvm_shared::address::Address;
+use fvm_shared::address::Address as FilecoinAddress;
 use fvm_shared::bigint::BigInt;
 use fvm_shared::econ::TokenAmount;
 use fvm_shared::message::Message;
-use libsecp256k1::{sign, PublicKey, SecretKey};
 use log::info;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -25,7 +24,7 @@ use std::sync::Arc;
 
 use crate::utils::{
     claim_earnings, deploy_factory_contract, fund_factory_contract, generate_monthly_payout,
-    new_payout,
+    get_gas_info, get_nonce, new_payout,
 };
 
 #[allow(missing_docs)]
@@ -197,70 +196,63 @@ impl Cli {
                 println!("{:#?}", result);
             }
             Commands::ProposeNewPayout {
-                actor_id,
-                factory_address,
+                actor_address,
+                receiver_address,
                 proposer_address,
+                private_key,
             } => {
                 let params = ProposeParams {
-                    to: fvm_shared::address::Address::from_str(
-                        "f1g4nbnure6oq2tvytw5gsh7atvbo5wt4znxx6qci",
-                    )
-                    .unwrap(),
-                    value: TokenAmount::from_atto(BigInt::from_str("1000000000000").unwrap()),
+                    to: FilecoinAddress::from_str("f1mtkndd5nczhq4s7ld36a6m7sn2mcoxkpjyt57oq")
+                        .unwrap(),
+                    value: TokenAmount::from_atto(BigInt::from_str("10000000000000").unwrap()),
                     method: 0,
                     params: RawBytes::new(vec![]),
                 };
 
-                let send_address = fvm_shared::address::Address::from_str(
-                    "f1g4nbnure6oq2tvytw5gsh7atvbo5wt4znxx6qci",
+                let nonce = get_nonce(
+                    "f15lpcnqqr7cyemknve3wpeqhtniirwhhwguhkwky",
+                    provider.clone(),
                 )
-                .unwrap();
-                let result: Value = provider
-                    .request::<[&str; 1], Value>(
-                        "Filecoin.MpoolGetNonce",
-                        ["f1g4nbnure6oq2tvytw5gsh7atvbo5wt4znxx6qci"],
-                    )
-                    .await
-                    .unwrap();
-                println!("{:#?}", result);
+                .await;
 
-                let message = Message {
+                // TODO: Properly define what this value represents
+                let max_fee = "10000000000000";
+
+                let mut message = Message {
                     version: 0,
-                    to: fvm_shared::address::Address::from_str(
-                        "f1mtkndd5nczhq4s7ld36a6m7sn2mcoxkpjyt57oq",
-                    )
-                    .unwrap(),
-                    from: send_address,
-                    sequence: 8,
-                    value: TokenAmount::from_atto(BigInt::from_str("100000000000000").unwrap()),
-                    gas_limit: 10000000000,
-                    gas_fee_cap: TokenAmount::from_atto(BigInt::from_str("75200272").unwrap()),
-                    gas_premium: TokenAmount::from_atto(BigInt::from_str("5400002").unwrap()),
-                    method_num: 0, // Propose is method no 2
-                    params: RawBytes::new(vec![]),
-                    // params: MessageParams::ProposeParams(params).serialize().unwrap(),
+                    to: FilecoinAddress::from_str("f2qhtaxgybfv7djixraoo337pi345j73keurbwsmi")
+                        .unwrap(),
+                    from: FilecoinAddress::from_str("f15lpcnqqr7cyemknve3wpeqhtniirwhhwguhkwky")
+                        .unwrap(),
+                    sequence: nonce,
+                    value: TokenAmount::from_atto(BigInt::from_str("0").unwrap()),
+                    gas_limit: 0,
+                    gas_fee_cap: TokenAmount::from_atto(BigInt::from_str("0").unwrap()),
+                    gas_premium: TokenAmount::from_atto(BigInt::from_str("0").unwrap()),
+                    method_num: 2, // Propose is method no 2
+                    params: MessageParams::ProposeParams(params).serialize().unwrap(),
                 };
-                let private_key_string = String::from("");
+
+                let gas_info = get_gas_info(message.clone(), provider.clone(), max_fee).await;
+
+                message.gas_limit = gas_info.gas_limit;
+                message.gas_fee_cap = gas_info.gas_fee_cap;
+                message.gas_premium = gas_info.gas_premium;
+
+                let private_key_string =
+                    String::from("0KRbQC0TxwsVpEcRl6QsXqM6I6oRlej2+P9gixNv610=");
                 let private_key = PrivateKey::try_from(private_key_string).unwrap();
 
                 let signature = transaction_sign(&message, &private_key).unwrap();
-
-                let secret_key = SecretKey::parse_slice(&private_key.0)?;
-                let public_key = PublicKey::from_secret_key(&secret_key);
-
                 let signed_message: MessageTxAPI = MessageTxAPI::SignedMessage(signature);
+                // let string_signed_message = serde_json::to_string(&signed_message).unwrap();
+                println!("{:#?}", signed_message);
 
-                println!("{:#?}", message);
-
-                let string_signed_message = serde_json::to_string(&signed_message).unwrap();
-
-                println!("{:#?}", string_signed_message);
-
-                let result: Value = provider
-                    .request::<[MessageTxAPI; 1], Value>("Filecoin.MpoolPush", [signed_message])
-                    .await
-                    .unwrap();
-                println!("{:#?}", result);
+                // let result: Value = provider
+                //     .request::<[MessageTxAPI; 1], Value>("Filecoin.MpoolPush", [signed_message])
+                //     .await
+                //     .unwrap();
+                // println!("{:#?}", result);
             }
             Commands::ApproveNewPayout {
                 actor_id,
@@ -349,13 +341,16 @@ pub enum Commands {
     ProposeNewPayout {
         /// Multisig actor id
         #[arg(short = 'A', long)]
-        actor_id: String,
+        actor_address: String,
         /// Payout Factory Filecoin Address
-        #[arg(short = 'F', long)]
-        factory_address: String,
+        #[arg(short = 'M', long)]
+        receiver_address: String,
         /// Sender Filecoin Address
         #[arg(short = 'S', long)]
         proposer_address: String,
+        /// Sender SECP Prviate Key
+        #[arg(short = 'P', long)]
+        private_key: String,
     },
     #[command(arg_required_else_help = true)]
     ApproveNewPayout {
