@@ -27,6 +27,9 @@ use crate::utils::{
     get_gas_info, get_nonce, new_payout,
 };
 
+// MaxFee is set to zero when using MpoolPush
+const MAX_FEE: &str = "0";
+
 #[allow(missing_docs)]
 #[derive(Parser, Debug, Clone, Deserialize, Serialize)]
 #[command(author, version, about, long_about = None)]
@@ -204,9 +207,6 @@ impl Cli {
 
                 let nonce = get_nonce(&proposer_address, provider.clone()).await;
 
-                // TODO: Properly define what this value represents
-                let max_fee: &str = "100000000000000";
-
                 let mut message = Message {
                     version: 0,
                     to: FilecoinAddress::from_str(&actor_address).unwrap(),
@@ -220,7 +220,7 @@ impl Cli {
                     params: MessageParams::ProposeParams(params).serialize().unwrap(),
                 };
 
-                let gas_info = get_gas_info(message.clone(), provider.clone(), max_fee).await;
+                let gas_info = get_gas_info(message.clone(), provider.clone(), MAX_FEE).await;
 
                 message.gas_limit = gas_info.gas_limit;
                 message.gas_fee_cap = gas_info.gas_fee_cap;
@@ -251,9 +251,6 @@ impl Cli {
 
                 let nonce = get_nonce(&approver_address, provider.clone()).await;
 
-                // TODO: Properly define what this value represents
-                let max_fee: &str = "100000000000000";
-
                 let mut message = Message {
                     version: 0,
                     to: FilecoinAddress::from_str(&actor_address).unwrap(),
@@ -267,7 +264,7 @@ impl Cli {
                     params: MessageParams::TxnIDParams(params).serialize().unwrap(),
                 };
 
-                let gas_info = get_gas_info(message.clone(), provider.clone(), max_fee).await;
+                let gas_info = get_gas_info(message.clone(), provider.clone(), MAX_FEE).await;
 
                 message.gas_limit = gas_info.gas_limit;
                 message.gas_fee_cap = gas_info.gas_fee_cap;
