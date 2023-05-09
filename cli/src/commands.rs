@@ -201,29 +201,22 @@ impl Cli {
                 proposer_address,
                 private_key,
             } => {
-                let params = ProposeParams {
-                    to: FilecoinAddress::from_str("f1mtkndd5nczhq4s7ld36a6m7sn2mcoxkpjyt57oq")
-                        .unwrap(),
+                let params: ProposeParams = ProposeParams {
+                    to: FilecoinAddress::from_str(&receiver_address).unwrap(),
                     value: TokenAmount::from_atto(BigInt::from_str("10000000000000").unwrap()),
                     method: 0,
                     params: RawBytes::new(vec![]),
                 };
 
-                let nonce = get_nonce(
-                    "f15lpcnqqr7cyemknve3wpeqhtniirwhhwguhkwky",
-                    provider.clone(),
-                )
-                .await;
+                let nonce = get_nonce(&proposer_address, provider.clone()).await;
 
                 // TODO: Properly define what this value represents
-                let max_fee = "10000000000000";
+                let max_fee: &str = "100000000000000";
 
                 let mut message = Message {
                     version: 0,
-                    to: FilecoinAddress::from_str("f2qhtaxgybfv7djixraoo337pi345j73keurbwsmi")
-                        .unwrap(),
-                    from: FilecoinAddress::from_str("f15lpcnqqr7cyemknve3wpeqhtniirwhhwguhkwky")
-                        .unwrap(),
+                    to: FilecoinAddress::from_str(&actor_address).unwrap(),
+                    from: FilecoinAddress::from_str(&proposer_address).unwrap(),
                     sequence: nonce,
                     value: TokenAmount::from_atto(BigInt::from_str("0").unwrap()),
                     gas_limit: 0,
@@ -239,20 +232,19 @@ impl Cli {
                 message.gas_fee_cap = gas_info.gas_fee_cap;
                 message.gas_premium = gas_info.gas_premium;
 
-                let private_key_string =
-                    String::from("0KRbQC0TxwsVpEcRl6QsXqM6I6oRlej2+P9gixNv610=");
+                let private_key_string = String::from(private_key.as_str());
                 let private_key = PrivateKey::try_from(private_key_string).unwrap();
 
                 let signature = transaction_sign(&message, &private_key).unwrap();
                 let signed_message: MessageTxAPI = MessageTxAPI::SignedMessage(signature);
                 // let string_signed_message = serde_json::to_string(&signed_message).unwrap();
-                println!("{:#?}", signed_message);
+                // println!("{:#?}", string_signed_message);
 
-                // let result: Value = provider
-                //     .request::<[MessageTxAPI; 1], Value>("Filecoin.MpoolPush", [signed_message])
-                //     .await
-                //     .unwrap();
-                // println!("{:#?}", result);
+                let result: Value = provider
+                    .request::<[MessageTxAPI; 1], Value>("Filecoin.MpoolPush", [signed_message])
+                    .await
+                    .unwrap();
+                println!("{:#?}", result);
             }
             Commands::ApproveNewPayout {
                 actor_id,

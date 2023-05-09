@@ -9,7 +9,6 @@ use ethers::types::{Eip1559TransactionRequest, U256};
 use csv::{Error as CsvError, Writer};
 use extras::json::tokenamount;
 use filecoin_signer::api::MessageTxAPI;
-use fvm_shared::address::Address as FilecoinAddress;
 use fvm_shared::econ::TokenAmount;
 use fvm_shared::message::Message;
 use tokio_postgres::Error as DbError;
