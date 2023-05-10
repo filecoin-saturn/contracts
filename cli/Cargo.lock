@@ -919,6 +919,7 @@ dependencies = [
  "ethers",
  "extras",
  "fevm-utils",
+ "fil_actor_evm",
  "fil_actor_multisig",
  "filecoin-signer",
  "fvm_ipld_encoding",

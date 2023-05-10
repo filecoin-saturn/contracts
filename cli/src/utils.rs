@@ -48,6 +48,9 @@ struct Payment {
     FIL: f64,
 }
 
+/// calldata is encoding as a byte array of variable length with length encoded by (1, 2, 4, 8 bytes)
+const PARAMS_CBOR_HEADER: [&str; 4] = ["58", "59", "5a", "5b"];
+
 /// Parses payouts from a csv file.
 ///
 /// CSV file formatted as such:
@@ -207,6 +210,45 @@ pub async fn new_payout<S: Middleware + 'static>(
 
     send_tx(&payout_tx.tx, client, retries).await?;
     Ok(())
+}
+
+pub async fn propose_new_payout_callbytes<S: Middleware + 'static>(
+    client: Arc<S>,
+    factory_addr: &str,
+    payout_csv: &Option<PathBuf>,
+    db_deploy: &bool,
+    date: &str,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let addr = Address::from_str(factory_addr)?;
+    let factory = PayoutFactory::new(addr, client.clone());
+
+    let payees;
+    let shares;
+
+    if *db_deploy {
+        (payees, shares) = parse_payouts_from_db(date, factory_addr).await.unwrap();
+    } else {
+        (payees, shares) = match payout_csv {
+            Some(csv_path) => parse_payouts_from_csv(csv_path).await.unwrap(),
+            None => {
+                panic!("Either payout-csv or db-deployment must be defined as CLI args")
+            }
+        }
+    }
+
+    let call_bytes = factory.payout(payees, shares).calldata().unwrap().to_vec();
+
+    let num_bytes = call_bytes.len().to_be_bytes();
+    let num_bytes = num_bytes
+        .iter()
+        .filter(|x| **x != 0)
+        .map(|x| x.clone())
+        .collect::<Vec<u8>>();
+    let mut params = hex::decode(PARAMS_CBOR_HEADER[num_bytes.len() - 1])?;
+    params.extend(num_bytes);
+    params.extend(call_bytes);
+
+    Ok(params)
 }
 
 async fn get_wallet(

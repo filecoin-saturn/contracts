@@ -18,6 +18,7 @@ libsecp256k1 = "0.6"
 serde = "1.0.152"
 serde_json = "1.0.96"
 fil_actor_multisig = { version = "10.0.0", git = "https://github.com/filecoin-project/builtin-actors", tag = "v10.0.0" }
+fil_actor_evm = { git = "https://github.com/filecoin-project/builtin-actors", tag = "v10.0.0"  }
 log = { version = "0.4.17" }
 colog = { version = "1.1.0" }
 csv = "1.2.0"

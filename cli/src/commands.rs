@@ -5,7 +5,9 @@ use ethers::middleware::SignerMiddleware;
 use ethers::prelude::{Http, Middleware, Provider};
 use ethers::signers::Wallet;
 use ethers::utils::__serde_json::{ser, Value};
-use fevm_utils::{get_ledger_signing_provider, get_provider, get_wallet_signing_provider};
+use fevm_utils::{
+    filecoin_to_eth_address, get_ledger_signing_provider, get_provider, get_wallet_signing_provider,
+};
 use fil_actor_multisig::{ProposeParams, TxnID, TxnIDParams};
 use filecoin_signer::api::{MessageParams, MessageTxAPI};
 use filecoin_signer::{transaction_sign, PrivateKey};
@@ -24,7 +26,7 @@ use std::sync::Arc;
 
 use crate::utils::{
     claim_earnings, deploy_factory_contract, fund_factory_contract, generate_monthly_payout,
-    get_gas_info, get_nonce, new_payout,
+    get_gas_info, get_nonce, new_payout, propose_new_payout_callbytes,
 };
 
 // MaxFee is set to zero when using MpoolPush
@@ -197,12 +199,28 @@ impl Cli {
                 receiver_address,
                 proposer_address,
                 private_key,
+                payout_csv,
+                db_deploy,
+                date,
             } => {
+                let factory_addr_eth =
+                    filecoin_to_eth_address(&receiver_address, &self.rpc_url).await?;
+
+                let propose_call_data = propose_new_payout_callbytes(
+                    Arc::new(provider.clone()),
+                    &factory_addr_eth,
+                    payout_csv,
+                    db_deploy,
+                    date,
+                )
+                .await?;
+
                 let params: ProposeParams = ProposeParams {
                     to: FilecoinAddress::from_str(&receiver_address).unwrap(),
-                    value: TokenAmount::from_atto(BigInt::from_str("10000000000000").unwrap()),
-                    method: 0,
-                    params: RawBytes::new(vec![]),
+                    // no transfer of value
+                    value: TokenAmount::from_atto(BigInt::from_str("0").unwrap()),
+                    method: fil_actor_evm::Method::InvokeContract as u64,
+                    params: RawBytes::new(propose_call_data),
                 };
 
                 let nonce = get_nonce(&proposer_address, provider.clone()).await;
@@ -236,6 +254,7 @@ impl Cli {
                     .request::<[MessageTxAPI; 1], Value>("Filecoin.MpoolPush", [signed_message])
                     .await
                     .unwrap();
+
                 println!("{:#?}", result);
             }
             Commands::ApproveNewPayout {
@@ -364,6 +383,14 @@ pub enum Commands {
         /// Sender SECP Prviate Key
         #[arg(short = 'P', long)]
         private_key: String,
+        #[arg(short = 'P', long)]
+        payout_csv: Option<PathBuf>,
+        // Flag to determine if this is a db deployment.
+        #[arg(long, conflicts_with = "payout_csv", default_value_t = false)]
+        db_deploy: bool,
+        // Date for the payout period month.
+        #[arg(short = 'D', long, default_value = "")]
+        date: String,
     },
     #[command(arg_required_else_help = true)]
     ApproveNewPayout {
