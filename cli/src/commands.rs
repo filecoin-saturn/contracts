@@ -383,7 +383,7 @@ pub enum Commands {
         /// Sender SECP Prviate Key
         #[arg(short = 'P', long)]
         private_key: String,
-        #[arg(short = 'P', long)]
+        #[arg(short = 'C', long)]
         payout_csv: Option<PathBuf>,
         // Flag to determine if this is a db deployment.
         #[arg(long, conflicts_with = "payout_csv", default_value_t = false)]
