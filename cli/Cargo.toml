@@ -11,7 +11,14 @@ thiserror = "1.0.38"
 ethers = { git = "https://github.com/gakonst/ethers-rs", default-features = false, rev = 'ee5e3e52', features = ["abigen", "ledger"]  }
 fevm-utils = { git = "https://github.com/filecoin-saturn/rs-fevm-utils" }
 tokio = { version = "1.17.0", features = ["macros"] }
+filecoin-signer = { path= "./signer" }
+extras = { path = "./extras" }
+fvm_ipld_encoding = "0.3.3"
+libsecp256k1 = "0.6"
 serde = "1.0.152"
+serde_json = "1.0.96"
+fil_actor_multisig = { version = "10.0.0", git = "https://github.com/filecoin-project/builtin-actors", tag = "v10.0.0" }
+fil_actor_evm = { git = "https://github.com/filecoin-project/builtin-actors", tag = "v10.0.0"  }
 log = { version = "0.4.17" }
 colog = { version = "1.1.0" }
 csv = "1.2.0"
@@ -26,3 +33,5 @@ assert_fs = "1.0.10"
 regex = "1.7.3"
 ethabi = "18.0.0"
 hex = "0.4.3"
+ledger-filecoin = { git = 'https://github.com/retrieval-markets-lab/ledger-filecoin-rs'}
+ledger-transport-hid = "0.9.0"

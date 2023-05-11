@@ -4,18 +4,43 @@ use ethers::core::k256::ecdsa::SigningKey;
 use ethers::middleware::SignerMiddleware;
 use ethers::prelude::{Http, Middleware, Provider};
 use ethers::signers::Wallet;
-use ethers::utils::__serde_json::ser;
-use fevm_utils::{get_ledger_signing_provider, get_provider, get_wallet_signing_provider};
+use ethers::utils::__serde_json::{ser, Value};
+use extras::signed_message::ref_fvm::SignedMessage;
+use fevm_utils::{
+    filecoin_to_eth_address, get_ledger_signing_provider, get_provider, get_wallet_signing_provider,
+};
+use fil_actor_multisig::{ProposeParams, TxnID, TxnIDParams};
+use filecoin_signer::api::{MessageParams, MessageTxAPI};
+use fvm_ipld_encoding::to_vec;
+use fvm_ipld_encoding::RawBytes;
+use fvm_shared::address::Address as FilecoinAddress;
+use fvm_shared::bigint::BigInt;
+use fvm_shared::crypto::signature::Signature as FilSignature;
+use fvm_shared::econ::TokenAmount;
+use fvm_shared::message::Message;
+use ledger_filecoin::BIP44Path;
 use log::info;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fs::{self, read_to_string};
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use crate::utils::{
     claim_earnings, deploy_factory_contract, fund_factory_contract, generate_monthly_payout,
-    new_payout,
+    get_filecoin_ledger, get_gas_info, get_nonce, new_payout, propose_new_payout_callbytes,
+};
+
+// MaxFee is set to zero when using MpoolPush
+const MAX_FEE: &str = "0";
+
+const BIP44_PATH: BIP44Path = BIP44Path {
+    purpose: 0x8000_0000 | 44,
+    coin: 0x8000_0000 | 461,
+    account: 0,
+    change: 0,
+    index: 0,
 };
 
 #[allow(missing_docs)]
@@ -61,7 +86,8 @@ impl Cli {
         ) -> Result<Arc<SignerMiddleware<Arc<Provider<Http>>, Wallet<SigningKey>>>, Box<dyn Error>>
         {
             let mnemonic = read_to_string(secret)?;
-            let client = get_wallet_signing_provider(provider, &mnemonic).await?;
+            let client: SignerMiddleware<Arc<Provider<Http>>, Wallet<SigningKey>> =
+                get_wallet_signing_provider(provider, &mnemonic).await?;
             let client = Arc::new(client);
             Ok(client)
         }
@@ -171,6 +197,143 @@ impl Cli {
                 date,
                 factory_address,
             } => generate_monthly_payout(date, factory_address).await,
+            Commands::MultisigInspect { actor_id } => {
+                let params: (&str, ()) = (actor_id.as_str(), ());
+                let result: Value = provider
+                    .request::<(&str, ()), Value>("Filecoin.StateReadState", params)
+                    .await
+                    .unwrap();
+                println!("{:#?}", result);
+            }
+            Commands::ProposeNewPayout {
+                actor_address,
+                receiver_address,
+                proposer_address,
+                payout_csv,
+                db_deploy,
+                date,
+            } => {
+                let filecoin_ledger_app = get_filecoin_ledger().await;
+
+                let factory_addr_eth =
+                    filecoin_to_eth_address(&receiver_address, &self.rpc_url).await?;
+
+                let propose_call_data = propose_new_payout_callbytes(
+                    Arc::new(provider.clone()),
+                    &factory_addr_eth,
+                    payout_csv,
+                    db_deploy,
+                    date,
+                )
+                .await?;
+
+                let params: ProposeParams = ProposeParams {
+                    to: FilecoinAddress::from_str(&receiver_address).unwrap(),
+                    // no transfer of value
+                    value: TokenAmount::from_atto(BigInt::from_str("0").unwrap()),
+                    method: fil_actor_evm::Method::InvokeContract as u64,
+                    params: RawBytes::new(propose_call_data),
+                };
+
+                let nonce = get_nonce(&proposer_address, provider.clone()).await;
+
+                let mut message = Message {
+                    version: 0,
+                    to: FilecoinAddress::from_str(&actor_address).unwrap(),
+                    from: FilecoinAddress::from_str(&proposer_address).unwrap(),
+                    sequence: nonce,
+                    value: TokenAmount::from_atto(BigInt::from_str("0").unwrap()),
+                    gas_limit: 0,
+                    gas_fee_cap: TokenAmount::from_atto(BigInt::from_str("0").unwrap()),
+                    gas_premium: TokenAmount::from_atto(BigInt::from_str("0").unwrap()),
+                    method_num: 2, // Propose is method no 2
+                    params: MessageParams::ProposeParams(params).serialize().unwrap(),
+                };
+
+                let gas_info = get_gas_info(message.clone(), provider.clone(), MAX_FEE).await;
+
+                message.gas_limit = gas_info.gas_limit;
+                message.gas_fee_cap = gas_info.gas_fee_cap;
+                message.gas_premium = gas_info.gas_premium;
+
+                let message_bytes = to_vec(&message).unwrap();
+
+                let signature = filecoin_ledger_app
+                    .sign(&BIP44_PATH, &message_bytes)
+                    .await
+                    .unwrap();
+                let sig = signature.sig.to_vec();
+                let signature = FilSignature::new_secp256k1(sig);
+
+                let signed_message: SignedMessage = SignedMessage {
+                    message: message,
+                    signature: signature,
+                };
+                let signed_message = MessageTxAPI::SignedMessage(signed_message);
+
+                let result: Value = provider
+                    .request::<[MessageTxAPI; 1], Value>("Filecoin.MpoolPush", [signed_message])
+                    .await
+                    .unwrap();
+
+                println!("{:#?}", result);
+            }
+            Commands::ApproveNewPayout {
+                actor_address,
+                transaction_id,
+                approver_address,
+            } => {
+                let filecoin_ledger_app = get_filecoin_ledger().await;
+
+                let params: TxnIDParams = TxnIDParams {
+                    id: TxnID(i64::from_str(&transaction_id).unwrap()),
+                    proposal_hash: vec![],
+                };
+
+                let nonce = get_nonce(&approver_address, provider.clone()).await;
+
+                let mut message = Message {
+                    version: 0,
+                    to: FilecoinAddress::from_str(&actor_address).unwrap(),
+                    from: FilecoinAddress::from_str(&approver_address).unwrap(),
+                    sequence: nonce,
+                    value: TokenAmount::from_atto(BigInt::from_str("0").unwrap()),
+                    gas_limit: 0,
+                    gas_fee_cap: TokenAmount::from_atto(BigInt::from_str("0").unwrap()),
+                    gas_premium: TokenAmount::from_atto(BigInt::from_str("0").unwrap()),
+                    method_num: 3, // Approve is method no 3
+                    params: MessageParams::TxnIDParams(params).serialize().unwrap(),
+                };
+
+                let gas_info = get_gas_info(message.clone(), provider.clone(), MAX_FEE).await;
+
+                message.gas_limit = gas_info.gas_limit;
+                message.gas_fee_cap = gas_info.gas_fee_cap;
+                message.gas_premium = gas_info.gas_premium;
+
+                let message_bytes = to_vec(&message).unwrap();
+
+                let signature = filecoin_ledger_app
+                    .sign(&BIP44_PATH, &message_bytes)
+                    .await
+                    .unwrap();
+                let sig = signature.sig.to_vec();
+
+                let signature = FilSignature::new_secp256k1(sig);
+
+                let signed_message: SignedMessage = SignedMessage {
+                    message: message,
+                    signature: signature,
+                };
+                let signed_message = MessageTxAPI::SignedMessage(signed_message);
+
+                let result: Value = provider
+                    .request::<[MessageTxAPI; 1], Value>("Filecoin.MpoolPush", [signed_message])
+                    .await
+                    .unwrap();
+
+                println!("{:#?}", result);
+            }
         }
         Ok(())
     }
@@ -231,5 +394,43 @@ pub enum Commands {
         /// PayoutFactory ethereum address.
         #[arg(short = 'F', long)]
         factory_address: String,
+    },
+    #[command(arg_required_else_help = true)]
+    MultisigInspect {
+        /// Multisig actor id
+        #[arg(short = 'A', long)]
+        actor_id: String,
+    },
+    #[command(arg_required_else_help = true)]
+    ProposeNewPayout {
+        /// Multisig actor id
+        #[arg(short = 'A', long)]
+        actor_address: String,
+        /// Payout Factory Filecoin Address
+        #[arg(short = 'M', long)]
+        receiver_address: String,
+        /// Sender Filecoin Address
+        #[arg(short = 'S', long)]
+        proposer_address: String,
+        #[arg(short = 'C', long)]
+        payout_csv: Option<PathBuf>,
+        // Flag to determine if this is a db deployment.
+        #[arg(long, conflicts_with = "payout_csv", default_value_t = false)]
+        db_deploy: bool,
+        // Date for the payout period month.
+        #[arg(short = 'D', long, default_value = "")]
+        date: String,
+    },
+    #[command(arg_required_else_help = true)]
+    ApproveNewPayout {
+        /// Multisig actor id
+        #[arg(short = 'A', long)]
+        actor_address: String,
+        /// Transaction Id
+        #[arg(short = 'T', long)]
+        transaction_id: String,
+        /// Approver Address
+        #[arg(short = 'S', long)]
+        approver_address: String,
     },
 }

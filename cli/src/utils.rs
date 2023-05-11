@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
 
@@ -6,6 +7,12 @@ use contract_bindings::shared_types::FilAddress;
 use ethers::types::{Eip1559TransactionRequest, U256};
 
 use csv::{Error as CsvError, Writer};
+use extras::json::tokenamount;
+use filecoin_signer::api::MessageTxAPI;
+use fvm_shared::econ::TokenAmount;
+use fvm_shared::message::Message;
+use ledger_filecoin::{BIP44Path, FilecoinApp};
+use ledger_transport_hid::{hidapi::HidApi, TransportNativeHID};
 use tokio_postgres::Error as DbError;
 
 use once_cell::sync::Lazy;
@@ -20,7 +27,7 @@ use ethers::types::transaction::eip2718::TypedTransaction;
 use fevm_utils::{check_address_string, get_wallet_signing_provider, send_tx, set_tx_gas};
 use log::info;
 use num_traits::FromPrimitive;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::fs::read_to_string;
 use std::io::{self, Write};
 use std::str::FromStr;
@@ -42,6 +49,9 @@ struct Payment {
     Recipient: String,
     FIL: f64,
 }
+
+/// calldata is encoding as a byte array of variable length with length encoded by (1, 2, 4, 8 bytes)
+const PARAMS_CBOR_HEADER: [&str; 4] = ["58", "59", "5a", "5b"];
 
 /// Parses payouts from a csv file.
 ///
@@ -204,6 +214,45 @@ pub async fn new_payout<S: Middleware + 'static>(
     Ok(())
 }
 
+pub async fn propose_new_payout_callbytes<S: Middleware + 'static>(
+    client: Arc<S>,
+    factory_addr: &str,
+    payout_csv: &Option<PathBuf>,
+    db_deploy: &bool,
+    date: &str,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let addr = Address::from_str(factory_addr)?;
+    let factory = PayoutFactory::new(addr, client.clone());
+
+    let payees;
+    let shares;
+
+    if *db_deploy {
+        (payees, shares) = parse_payouts_from_db(date, factory_addr).await.unwrap();
+    } else {
+        (payees, shares) = match payout_csv {
+            Some(csv_path) => parse_payouts_from_csv(csv_path).await.unwrap(),
+            None => {
+                panic!("Either payout-csv or db-deployment must be defined as CLI args")
+            }
+        }
+    }
+
+    let call_bytes = factory.payout(payees, shares).calldata().unwrap().to_vec();
+
+    let num_bytes = call_bytes.len().to_be_bytes();
+    let num_bytes = num_bytes
+        .iter()
+        .filter(|x| **x != 0)
+        .map(|x| x.clone())
+        .collect::<Vec<u8>>();
+    let mut params = hex::decode(PARAMS_CBOR_HEADER[num_bytes.len() - 1])?;
+    params.extend(num_bytes);
+    params.extend(call_bytes);
+
+    Ok(params)
+}
+
 async fn get_wallet(
     secret: PathBuf,
     provider: Provider<Http>,
@@ -316,4 +365,77 @@ pub async fn generate_monthly_payout(date: &str, factory_address: &str) {
     let csv_title = format!("Saturn-Cassini-Payouts-{}.csv", date);
     let path = PathBuf::from_str(csv_title.as_str()).unwrap();
     write_payout_csv(&path, &payees, &shares).unwrap();
+}
+
+#[derive(Debug)]
+pub struct TransactionGasInfo {
+    pub gas_limit: u64,
+    pub gas_fee_cap: TokenAmount,
+    pub gas_premium: TokenAmount,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct StateActorInfo {
+    #[serde(skip)]
+    pub code: HashMap<String, String>,
+    #[serde(skip)]
+    pub head: HashMap<String, String>,
+    #[serde(rename = "Balance", with = "tokenamount")]
+    pub balance: TokenAmount,
+    #[serde(rename = "Nonce")]
+    pub nonce: u64,
+}
+
+const GAS_LIMIT_MULTIPLIER: u64 = 150;
+
+pub async fn get_gas_info(
+    unsigned_message: Message,
+    provider: Provider<Http>,
+    max_fee: &str,
+) -> TransactionGasInfo {
+    let max_fee = HashMap::from([("MaxFee", max_fee)]);
+
+    let gas_info: MessageTxAPI = provider
+        .request::<(MessageTxAPI, HashMap<&str, &str>, ()), MessageTxAPI>(
+            "Filecoin.GasEstimateMessageGas",
+            (MessageTxAPI::Message(unsigned_message), max_fee, ()),
+        )
+        .await
+        .unwrap();
+
+    let gas_info = gas_info.get_message();
+    TransactionGasInfo {
+        gas_limit: gas_info.gas_limit * (GAS_LIMIT_MULTIPLIER / 100),
+        gas_premium: gas_info.gas_premium,
+        gas_fee_cap: gas_info.gas_fee_cap,
+    }
+}
+
+pub async fn get_nonce(address: &str, provider: Provider<Http>) -> u64 {
+    let result: StateActorInfo = provider
+        .request::<(&str, ()), StateActorInfo>("Filecoin.StateGetActor", (address, ()))
+        .await
+        .unwrap();
+
+    result.nonce
+}
+
+pub async fn get_filecoin_ledger() -> FilecoinApp<TransportNativeHID> {
+    let hid_api: Lazy<HidApi> = Lazy::new(|| HidApi::new().expect("Failed to create Hidapi"));
+
+    let app =
+        FilecoinApp::new(TransportNativeHID::new(&hid_api).expect("unable to create transport"));
+    let path = BIP44Path {
+        purpose: 0x8000_0000 | 44,
+        coin: 0x8000_0000 | 461,
+        account: 0,
+        change: 0,
+        index: 0,
+    };
+    let addr = app.address(&path, false).await.unwrap();
+    info!(
+        "Connected to Filecoin Ledger on address: {:#?}",
+        addr.addr_string
+    );
+    app
 }
