@@ -11,6 +11,8 @@ use extras::json::tokenamount;
 use filecoin_signer::api::MessageTxAPI;
 use fvm_shared::econ::TokenAmount;
 use fvm_shared::message::Message;
+use ledger_filecoin::{BIP44Path, FilecoinApp};
+use ledger_transport_hid::{hidapi::HidApi, TransportNativeHID};
 use tokio_postgres::Error as DbError;
 
 use once_cell::sync::Lazy;
@@ -416,4 +418,24 @@ pub async fn get_nonce(address: &str, provider: Provider<Http>) -> u64 {
         .unwrap();
 
     result.nonce
+}
+
+pub async fn get_filecoin_ledger() -> FilecoinApp<TransportNativeHID> {
+    let hid_api: Lazy<HidApi> = Lazy::new(|| HidApi::new().expect("Failed to create Hidapi"));
+
+    let app =
+        FilecoinApp::new(TransportNativeHID::new(&hid_api).expect("unable to create transport"));
+    let path = BIP44Path {
+        purpose: 0x8000_0000 | 44,
+        coin: 0x8000_0000 | 461,
+        account: 0,
+        change: 0,
+        index: 0,
+    };
+    let addr = app.address(&path, false).await.unwrap();
+    info!(
+        "Connected to Filecoin Ledger on address: {:#?}",
+        addr.addr_string
+    );
+    app
 }

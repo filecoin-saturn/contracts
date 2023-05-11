@@ -5,17 +5,20 @@ use ethers::middleware::SignerMiddleware;
 use ethers::prelude::{Http, Middleware, Provider};
 use ethers::signers::Wallet;
 use ethers::utils::__serde_json::{ser, Value};
+use extras::signed_message::ref_fvm::SignedMessage;
 use fevm_utils::{
     filecoin_to_eth_address, get_ledger_signing_provider, get_provider, get_wallet_signing_provider,
 };
 use fil_actor_multisig::{ProposeParams, TxnID, TxnIDParams};
 use filecoin_signer::api::{MessageParams, MessageTxAPI};
-use filecoin_signer::{transaction_sign, PrivateKey};
+use fvm_ipld_encoding::to_vec;
 use fvm_ipld_encoding::RawBytes;
 use fvm_shared::address::Address as FilecoinAddress;
 use fvm_shared::bigint::BigInt;
+use fvm_shared::crypto::signature::Signature as FilSignature;
 use fvm_shared::econ::TokenAmount;
 use fvm_shared::message::Message;
+use ledger_filecoin::BIP44Path;
 use log::info;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -26,11 +29,19 @@ use std::sync::Arc;
 
 use crate::utils::{
     claim_earnings, deploy_factory_contract, fund_factory_contract, generate_monthly_payout,
-    get_gas_info, get_nonce, new_payout, propose_new_payout_callbytes,
+    get_filecoin_ledger, get_gas_info, get_nonce, new_payout, propose_new_payout_callbytes,
 };
 
 // MaxFee is set to zero when using MpoolPush
 const MAX_FEE: &str = "0";
+
+const BIP44_PATH: BIP44Path = BIP44Path {
+    purpose: 0x8000_0000 | 44,
+    coin: 0x8000_0000 | 461,
+    account: 0,
+    change: 0,
+    index: 0,
+};
 
 #[allow(missing_docs)]
 #[derive(Parser, Debug, Clone, Deserialize, Serialize)]
@@ -198,11 +209,12 @@ impl Cli {
                 actor_address,
                 receiver_address,
                 proposer_address,
-                private_key,
                 payout_csv,
                 db_deploy,
                 date,
             } => {
+                let filecoin_ledger_app = get_filecoin_ledger().await;
+
                 let factory_addr_eth =
                     filecoin_to_eth_address(&receiver_address, &self.rpc_url).await?;
 
@@ -244,11 +256,20 @@ impl Cli {
                 message.gas_fee_cap = gas_info.gas_fee_cap;
                 message.gas_premium = gas_info.gas_premium;
 
-                let private_key_string = String::from(private_key.as_str());
-                let private_key = PrivateKey::try_from(private_key_string).unwrap();
+                let message_bytes = to_vec(&message).unwrap();
 
-                let signature = transaction_sign(&message, &private_key).unwrap();
-                let signed_message: MessageTxAPI = MessageTxAPI::SignedMessage(signature);
+                let signature = filecoin_ledger_app
+                    .sign(&BIP44_PATH, &message_bytes)
+                    .await
+                    .unwrap();
+                let sig = signature.sig.to_vec();
+                let signature = FilSignature::new_secp256k1(sig);
+
+                let signed_message: SignedMessage = SignedMessage {
+                    message: message,
+                    signature: signature,
+                };
+                let signed_message = MessageTxAPI::SignedMessage(signed_message);
 
                 let result: Value = provider
                     .request::<[MessageTxAPI; 1], Value>("Filecoin.MpoolPush", [signed_message])
@@ -261,8 +282,9 @@ impl Cli {
                 actor_address,
                 transaction_id,
                 approver_address,
-                private_key,
             } => {
+                let filecoin_ledger_app = get_filecoin_ledger().await;
+
                 let params: TxnIDParams = TxnIDParams {
                     id: TxnID(i64::from_str(&transaction_id).unwrap()),
                     proposal_hash: vec![],
@@ -289,11 +311,21 @@ impl Cli {
                 message.gas_fee_cap = gas_info.gas_fee_cap;
                 message.gas_premium = gas_info.gas_premium;
 
-                let private_key_string = String::from(private_key.as_str());
-                let private_key = PrivateKey::try_from(private_key_string).unwrap();
+                let message_bytes = to_vec(&message).unwrap();
 
-                let signature = transaction_sign(&message, &private_key).unwrap();
-                let signed_message: MessageTxAPI = MessageTxAPI::SignedMessage(signature);
+                let signature = filecoin_ledger_app
+                    .sign(&BIP44_PATH, &message_bytes)
+                    .await
+                    .unwrap();
+                let sig = signature.sig.to_vec();
+
+                let signature = FilSignature::new_secp256k1(sig);
+
+                let signed_message: SignedMessage = SignedMessage {
+                    message: message,
+                    signature: signature,
+                };
+                let signed_message = MessageTxAPI::SignedMessage(signed_message);
 
                 let result: Value = provider
                     .request::<[MessageTxAPI; 1], Value>("Filecoin.MpoolPush", [signed_message])
@@ -380,9 +412,6 @@ pub enum Commands {
         /// Sender Filecoin Address
         #[arg(short = 'S', long)]
         proposer_address: String,
-        /// Sender SECP Prviate Key
-        #[arg(short = 'P', long)]
-        private_key: String,
         #[arg(short = 'C', long)]
         payout_csv: Option<PathBuf>,
         // Flag to determine if this is a db deployment.
@@ -403,8 +432,5 @@ pub enum Commands {
         /// Approver Address
         #[arg(short = 'S', long)]
         approver_address: String,
-        /// Sender SECP Prviate Key
-        #[arg(short = 'P', long)]
-        private_key: String,
     },
 }
