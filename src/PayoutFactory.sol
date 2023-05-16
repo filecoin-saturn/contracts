@@ -52,7 +52,8 @@ contract PayoutFactory is AccessControl {
      */
     function payout(
         address[] memory payees,
-        uint256[] memory shares_
+        uint256[] memory shares_,
+        uint256 totalValue
     ) external onlyRole(DEFAULT_ADMIN_ROLE) returns (address instance) {
         // create new payout instance
         instance = template.clone();
@@ -68,7 +69,7 @@ contract PayoutFactory is AccessControl {
         splitter.initialize(payees, shares_);
 
         // if tokens were pre-added to this contract here's where we'd fund the new contract
-        bool sent = payable(instance).send(splitter.totalShares());
+        bool sent = payable(instance).send(totalValue);
         require(sent, "PayoutFactory: Failed to send FIL");
     }
 
@@ -77,17 +78,6 @@ contract PayoutFactory is AccessControl {
      */
     function payouts() external view returns (address[] memory) {
         return _payouts;
-    }
-
-    /**
-     * @dev Returns the total shares over all previously generated payout contracts.
-     */
-    function totalShares() external view returns (uint256 totalValue) {
-        uint256 length = _payouts.length;
-        for (uint256 i = 0; i < length; i++) {
-            PaymentSplitter rewards = PaymentSplitter(payable(_payouts[i]));
-            totalValue += rewards.totalShares();
-        }
     }
 
     /**
@@ -160,20 +150,6 @@ contract PayoutFactory is AccessControl {
     }
 
     /**
-     * @dev Returns the total shares amount over all previously generated payout contracts.
-     * @param account The address of the payee.
-     */
-    function shares(
-        address account
-    ) external view returns (uint256 totalValue) {
-        uint256 length = _payouts.length;
-        for (uint256 i = 0; i < length; i++) {
-            PaymentSplitter rewards = PaymentSplitter(payable(_payouts[i]));
-            totalValue += rewards.shares(account);
-        }
-    }
-
-    /**
      * @dev Releases all available funds in previously generated payout contracts.
      */
     function releaseAll(address account) external {
@@ -186,15 +162,14 @@ contract PayoutFactory is AccessControl {
     /**
      * @dev Releases all available funds in selected generated payout contracts.
      * @param account The address of the payee.
-     * @param selectPayouts List of selected PaymentSplitter addresses.
+     * @param indices List of indices of the payout contracts to release.
      */
-    function releaseSelect(
-        address account,
-        address[] memory selectPayouts
-    ) external {
-        uint256 length = selectPayouts.length;
+    function releaseSelect(address account, uint256[] memory indices) external {
+        uint256 length = indices.length;
         for (uint256 i = 0; i < length; i++) {
-            address paymentSplitterAddress = selectPayouts[i];
+            uint256 index = indices[i];
+            require(index < _payouts.length);
+            address paymentSplitterAddress = _payouts[index];
             uint256 claimable = PaymentSplitter(payable(paymentSplitterAddress))
                 .releasable(account);
 

@@ -21,7 +21,7 @@ use contract_bindings::payout_factory_native_addr::PayoutFactoryNativeAddr as Pa
 use ethers::abi::Address;
 use ethers::core::k256::ecdsa::SigningKey;
 use ethers::middleware::SignerMiddleware;
-use ethers::prelude::{Http, Middleware, Provider};
+use ethers::providers::{Http, Middleware, Provider};
 use ethers::signers::Wallet;
 use ethers::types::transaction::eip2718::TypedTransaction;
 use fevm_utils::{check_address_string, get_wallet_signing_provider, send_tx, set_tx_gas};
@@ -145,7 +145,7 @@ pub fn write_payout_csv(
     Ok(())
 }
 
-pub async fn claim_earnings<S: Middleware + 'static>(
+pub async fn claim_earnings<S: ::ethers::providers::Middleware + 'static>(
     client: Arc<S>,
     retries: usize,
     gas_price: U256,
@@ -196,8 +196,10 @@ pub async fn new_payout<S: Middleware + 'static>(
         }
     }
 
+    let total_sum = shares.clone().iter().fold(U256::from(0), |acc, x| acc + x);
+
     let factory = PayoutFactory::new(addr, client.clone());
-    let mut payout_tx = factory.payout(payees, shares);
+    let mut payout_tx = factory.payout(payees, shares, total_sum);
     let tx = payout_tx.tx.clone();
     set_tx_gas(
         &mut payout_tx.tx,
@@ -238,7 +240,13 @@ pub async fn propose_new_payout_callbytes<S: Middleware + 'static>(
         }
     }
 
-    let call_bytes = factory.payout(payees, shares).calldata().unwrap().to_vec();
+    let total_sum = shares.clone().iter().fold(U256::from(0), |acc, x| acc + x);
+
+    let call_bytes = factory
+        .payout(payees, shares, total_sum)
+        .calldata()
+        .unwrap()
+        .to_vec();
 
     let num_bytes = call_bytes.len().to_be_bytes();
     let num_bytes = num_bytes

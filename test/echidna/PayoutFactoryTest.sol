@@ -83,10 +83,6 @@ contract TestPayoutFactory is PayoutFactory {
                     contractShares += splitter.shares(payee);
                 }
             }
-
-            if (contractShares > this.totalShares()) {
-                return false;
-            }
         }
         return true;
     }

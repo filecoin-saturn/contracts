@@ -44,7 +44,7 @@ contract PayoutFactoryTest is Test {
 
         uint256[] memory shares = new uint256[](addresses.length);
 
-        vm.deal(address(factory), addresses.length * 100001);
+        vm.deal(address(factory), addresses.length * 10001);
 
         for (uint256 i = 0; i < addresses.length; i++) {
             vm.assume(
@@ -52,12 +52,20 @@ contract PayoutFactoryTest is Test {
                 addresses[i] != address(0) &&
                     // reserved addresses
                     uint160(addresses[i]) >
-                    uint160(0x0000000000000000000000000000000000000010)
+                    uint160(0x0000000000000000000000000000000000000010) &&
+                    // not the factory address
+                    addresses[i] != address(factory) &&
+                    // not the current address
+                    addresses[i] != address(this)
             );
             shares[i] = 1;
         }
 
-        address payoutAddress = factory.payout(addresses, shares);
+        address payoutAddress = factory.payout(
+            addresses,
+            shares,
+            addresses.length
+        );
         splitter = PaymentSplitter(payable(payoutAddress));
 
         for (uint256 i = 0; i < addresses.length; i++) {
@@ -71,7 +79,11 @@ contract PayoutFactoryTest is Test {
             shares[i] = 10000;
         }
 
-        address payoutAddress2 = factory.payout(addresses, shares);
+        address payoutAddress2 = factory.payout(
+            addresses,
+            shares,
+            addresses.length * 10000
+        );
         // make sure the current variable has updated accordingly
         assert(payoutAddress != payoutAddress2);
         splitter = PaymentSplitter(payable(payoutAddress2));
@@ -112,7 +124,11 @@ contract PayoutFactoryTest is Test {
 
         for (uint256 i = 0; i < 12; i++) {
             // now payout again to check we can create a new contract
-            address payoutAddr = factory.payout(addresses, shares);
+            address payoutAddr = factory.payout(
+                addresses,
+                shares,
+                addresses.length
+            );
             for (uint256 j = 0; j < addresses.length; j++) {
                 vm.assume(addresses[j] != payoutAddr);
             }

@@ -53,7 +53,8 @@ contract PayoutFactoryNativeAddr is AccessControl {
      */
     function payout(
         CommonTypes.FilAddress[] memory payees,
-        uint256[] memory shares_
+        uint256[] memory shares_,
+        uint256 totalValue
     ) external onlyRole(DEFAULT_ADMIN_ROLE) returns (address instance) {
         // create new payout instance
         instance = template.clone();
@@ -71,7 +72,7 @@ contract PayoutFactoryNativeAddr is AccessControl {
         splitter.initialize(payees, shares_);
 
         // if tokens were pre-added to this contract here's where we'd fund the new contract
-        bool sent = payable(instance).send(splitter.totalShares());
+        bool sent = payable(instance).send(totalValue);
         require(sent, "PayoutFactory: Failed to send FIL");
     }
 
@@ -80,19 +81,6 @@ contract PayoutFactoryNativeAddr is AccessControl {
      */
     function payouts() external view returns (address[] memory) {
         return _payouts;
-    }
-
-    /**
-     * @dev Returns the total shares over all previously generated payout contracts.
-     */
-    function totalShares() external view returns (uint256 totalValue) {
-        uint256 length = _payouts.length;
-        for (uint256 i = 0; i < length; i++) {
-            PaymentSplitterNativeAddr rewards = PaymentSplitterNativeAddr(
-                payable(_payouts[i])
-            );
-            totalValue += rewards.totalShares();
-        }
     }
 
     /**
@@ -173,22 +161,6 @@ contract PayoutFactoryNativeAddr is AccessControl {
     }
 
     /**
-     * @dev Returns the total shares amount over all previously generated payout contracts.
-     * @param account The address of the payee.
-     */
-    function shares(
-        CommonTypes.FilAddress memory account
-    ) external view returns (uint256 totalValue) {
-        uint256 length = _payouts.length;
-        for (uint256 i = 0; i < length; i++) {
-            PaymentSplitterNativeAddr rewards = PaymentSplitterNativeAddr(
-                payable(_payouts[i])
-            );
-            totalValue += rewards.shares(account);
-        }
-    }
-
-    /**
      * @dev Releases all available funds in previously generated payout contracts.
      */
     function releaseAll(CommonTypes.FilAddress memory account) external {
@@ -201,15 +173,17 @@ contract PayoutFactoryNativeAddr is AccessControl {
     /**
      * @dev Releases all available funds in selected generated payout contracts.
      * @param account The address of the payee.
-     * @param selectPayouts List of selected PaymentSplitterNativeAddr addresses.
+     * @param indices List of indices of the payout contracts to release.
      */
     function releaseSelect(
         CommonTypes.FilAddress memory account,
-        address[] memory selectPayouts
+        uint256[] memory indices
     ) external {
-        uint256 length = selectPayouts.length;
+        uint256 length = indices.length;
         for (uint256 i = 0; i < length; i++) {
-            address paymentSplitterAddress = selectPayouts[i];
+            uint256 index = indices[i];
+            require(index < _payouts.length);
+            address paymentSplitterAddress = _payouts[index];
             uint256 claimable = PaymentSplitterNativeAddr(
                 payable(paymentSplitterAddress)
             ).releasable(account);

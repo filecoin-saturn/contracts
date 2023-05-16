@@ -8,8 +8,8 @@ fvm_shared = { version = "3.0.0-alpha.17" }
 contract-bindings = { path= "./bindings" }
 clap = { version = "4.0.32", features = ["derive"] }
 thiserror = "1.0.38"
-ethers = { git = "https://github.com/gakonst/ethers-rs", default-features = false, rev = 'ee5e3e52', features = ["abigen", "ledger"]  }
-fevm-utils = { git = "https://github.com/filecoin-saturn/rs-fevm-utils" }
+ethers = { version = "2", default-features = false, features = ["abigen", "ledger"] }
+fevm-utils = { git = "https://github.com/filecoin-saturn/rs-fevm-utils", branch = "ac/bump-ethers-v" }
 tokio = { version = "1.17.0", features = ["macros"] }
 filecoin-signer = { path= "./signer" }
 extras = { path = "./extras" }

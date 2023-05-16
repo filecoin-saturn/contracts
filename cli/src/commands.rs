@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 use contract_bindings::payout_factory_native_addr::PAYOUTFACTORYNATIVEADDR_ABI;
 use ethers::core::k256::ecdsa::SigningKey;
 use ethers::middleware::SignerMiddleware;
-use ethers::prelude::{Http, Middleware, Provider};
+use ethers::providers::{Http, Middleware, Provider};
 use ethers::signers::Wallet;
 use ethers::utils::__serde_json::{ser, Value};
 use extras::signed_message::ref_fvm::SignedMessage;
