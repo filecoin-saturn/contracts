@@ -110,7 +110,11 @@ contract PayoutFactoryTest is Test {
                 addresses[i] != address(0) &&
                     // reserved addresses
                     uint160(addresses[i]) >
-                    uint160(0x0000000000000000000000000000000000000010)
+                    uint160(0x0000000000000000000000000000000000000010) &&
+                    // not the factory address
+                    addresses[i] != address(factory) &&
+                    // not the current address
+                    addresses[i] != address(this)
             );
         }
 
