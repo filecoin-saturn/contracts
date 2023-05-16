@@ -136,7 +136,7 @@ contract PayoutFactoryTest is Test {
 
         for (uint256 i = 0; i < addresses.length; i++) {
             assert(factory.releasable(addresses[i]) == 12);
-            factory.releaseAll(addresses[i]);
+            factory.releaseAll(addresses[i], 0);
             // 12 releases balance
             assert(addresses[i].balance == 12);
         }

@@ -150,11 +150,16 @@ contract PayoutFactory is AccessControl {
     }
 
     /**
-     * @dev Releases all available funds in previously generated payout contracts.
+     * @dev Releases all available funds in previously generated payout contracts subsequent to a given offset.
+     * @param offset The index of the first payout contract to release. At most 12 contracts can be released in a single call.
      */
-    function releaseAll(address account) external {
+    function releaseAll(address account, uint256 offset) external {
         uint256 length = _payouts.length;
-        for (uint256 i = 0; i < length; i++) {
+        require(offset <= length);
+        uint limit = 12;
+        // min
+        uint stop = length <= offset + limit ? length : offset + limit;
+        for (uint i = offset; i < stop; i++) {
             _releasePayout(account, i);
         }
     }
@@ -162,10 +167,11 @@ contract PayoutFactory is AccessControl {
     /**
      * @dev Releases all available funds in selected generated payout contracts.
      * @param account The address of the payee.
-     * @param indices List of indices of the payout contracts to release.
+     * @param indices List of indices of the payout contracts to release. At most 12 contracts can be released in a single call.
      */
     function releaseSelect(address account, uint256[] memory indices) external {
         uint256 length = indices.length;
+        require(length <= 12, "PayoutFactory: Too many contracts to release");
         for (uint256 i = 0; i < length; i++) {
             uint256 index = indices[i];
             require(index < _payouts.length);
