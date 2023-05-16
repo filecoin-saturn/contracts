@@ -151,6 +151,7 @@ impl Cli {
             Commands::Claim {
                 factory_addr,
                 addr_to_claim,
+                offset,
             } => {
                 if self.secret.is_some() {
                     let client = get_wallet(self.secret.unwrap(), provider).await?;
@@ -158,6 +159,7 @@ impl Cli {
                         client.clone(),
                         self.retries,
                         gas_price,
+                        ethers::types::U256::from(*offset),
                         factory_addr,
                         addr_to_claim,
                     )
@@ -169,6 +171,7 @@ impl Cli {
                         client.clone(),
                         self.retries,
                         gas_price,
+                        ethers::types::U256::from(*offset),
                         factory_addr,
                         addr_to_claim,
                     )
@@ -368,6 +371,9 @@ pub enum Commands {
         // Address to claim for
         #[arg(short = 'A', long)]
         addr_to_claim: String,
+        // Index from which to start claiming
+        #[arg(short = 'O', long)]
+        offset: usize,
     },
     /// Fund a factory contract
     #[command(arg_required_else_help = true)]

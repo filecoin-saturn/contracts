@@ -134,6 +134,8 @@ fn cli_4_claim() -> Result<(), Box<dyn std::error::Error>> {
         factory_addr,
         "--addr-to-claim",
         RECIPIENT_ADDRESS,
+        "--offset",
+        "0",
     ];
     args.append(&mut new_payout_args);
 

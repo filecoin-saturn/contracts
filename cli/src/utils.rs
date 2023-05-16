@@ -149,6 +149,7 @@ pub async fn claim_earnings<S: ::ethers::providers::Middleware + 'static>(
     client: Arc<S>,
     retries: usize,
     gas_price: U256,
+    offset: U256,
     factory_addr: &str,
     addr_to_claim: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -158,7 +159,7 @@ pub async fn claim_earnings<S: ::ethers::providers::Middleware + 'static>(
     let claim_addr = FilAddress {
         data: addr_to_claim.bytes.into(),
     };
-    let mut claim_tx = factory.release_all(claim_addr);
+    let mut claim_tx = factory.release_all(claim_addr, offset);
     let tx = claim_tx.tx.clone();
     set_tx_gas(
         &mut claim_tx.tx,
