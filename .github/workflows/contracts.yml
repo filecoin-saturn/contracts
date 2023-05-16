@@ -19,7 +19,9 @@ jobs:
           submodules: recursive
 
       - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v2
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: 2.0.0
 
       - name: Install node
         uses: actions/setup-node@v3
