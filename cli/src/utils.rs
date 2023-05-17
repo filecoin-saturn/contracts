@@ -26,7 +26,7 @@ use ethers::signers::Wallet;
 use ethers::types::transaction::eip2718::TypedTransaction;
 use fevm_utils::{check_address_string, get_wallet_signing_provider, send_tx, set_tx_gas};
 use log::info;
-use num_traits::FromPrimitive;
+use num_traits::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use std::fs::read_to_string;
 use std::io::{self, Write};
@@ -36,6 +36,8 @@ use std::sync::Arc;
 use crate::db::{get_payment_records, get_payment_records_for_finance, PayoutRecords};
 
 pub static ATTO_FIL: Lazy<f64> = Lazy::new(|| 10_f64.powf(18.0));
+
+pub const MAX_PAYEES_PER_PAYOUT: usize = 700;
 
 #[derive(thiserror::Error, Debug)]
 pub enum CLIError {
@@ -173,6 +175,71 @@ pub async fn claim_earnings<S: ::ethers::providers::Middleware + 'static>(
     Ok(())
 }
 
+pub async fn deploy_payout_batch<S: Middleware + 'static>(
+    start_index: usize,
+    payees: &Vec<FilAddress>,
+    shares: &Vec<U256>,
+    factory_contract: PayoutFactory<S>,
+    client: Arc<S>,
+    gas_price: U256,
+    retries: usize,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let payouts_size = payees.len();
+
+    if start_index >= payouts_size {
+        return Ok(());
+    }
+
+    let end_index = if start_index + MAX_PAYEES_PER_PAYOUT >= payouts_size {
+        payouts_size
+    } else {
+        start_index + MAX_PAYEES_PER_PAYOUT
+    };
+    info!(
+        "Deploying payouts with index range {:?} ... {:?}",
+        start_index, end_index
+    );
+
+    let payees = Vec::from(&payees[start_index..end_index]);
+    let shares = Vec::from(&shares[start_index..end_index]);
+
+    let total_sum = shares.clone().iter().fold(U256::from(0), |acc, x| acc + x);
+
+    let mut payout_tx = factory_contract.payout(payees, shares, total_sum);
+    let tx = payout_tx.tx.clone();
+
+    let gas_estimate_result = client.estimate_gas(&tx, None).await;
+    let gas_estimate = match gas_estimate_result {
+        Ok(gas) => gas,
+        Err(error) => panic!(
+            "Error estimating gas for batch payout at index range {:?} .. {:?}:  {:?}",
+            start_index, end_index, error
+        ),
+    };
+    set_tx_gas(&mut payout_tx.tx, gas_estimate, gas_price);
+
+    info!(
+        "Estimated batch payout gas cost {:#?}",
+        payout_tx.tx.gas().unwrap()
+    );
+
+    let receipt_result = send_tx(&payout_tx.tx, client, retries).await;
+
+    let receipt = match receipt_result {
+        Ok(receipt) => receipt,
+        Err(error) => panic!(
+            "Error deploying batch payout at index range {:?} .. {:?}:  {:?}",
+            start_index, end_index, error
+        ),
+    };
+
+    info!(
+        "Batch Deployment Successful, TxId: {:?} \n",
+        receipt.transaction_hash
+    );
+    Ok(())
+}
+
 pub async fn new_payout<S: Middleware + 'static>(
     client: Arc<S>,
     retries: usize,
@@ -199,21 +266,45 @@ pub async fn new_payout<S: Middleware + 'static>(
 
     let total_sum = shares.clone().iter().fold(U256::from(0), |acc, x| acc + x);
 
-    let factory = PayoutFactory::new(addr, client.clone());
-    let mut payout_tx = factory.payout(payees, shares, total_sum);
-    let tx = payout_tx.tx.clone();
-    set_tx_gas(
-        &mut payout_tx.tx,
-        client.estimate_gas(&tx, None).await?,
-        gas_price,
-    );
-
     info!(
-        "estimated payout gas cost {:#?}",
-        payout_tx.tx.gas().unwrap()
+        "Total Sum from Payouts: {:?}",
+        total_sum.as_u128() as f64 / ATTO_FIL.to_f64().unwrap()
     );
+    info!("Total Payee Count: {:?}", payees.len());
 
-    send_tx(&payout_tx.tx, client, retries).await?;
+    let factory: PayoutFactory<S> = PayoutFactory::new(addr, client.clone());
+
+    let payout_size: i32 = payees.len() as i32;
+    let batches = if payout_size % (MAX_PAYEES_PER_PAYOUT as i32) == 0 {
+        payout_size / (MAX_PAYEES_PER_PAYOUT as i32)
+    } else {
+        payout_size / (MAX_PAYEES_PER_PAYOUT as i32) + 1
+    };
+
+    info!("Deploying Payouts in {:?} batch deployments \n ", batches);
+    for i in 0..(batches as usize) {
+        let start_index = i * MAX_PAYEES_PER_PAYOUT;
+
+        let payout_result = deploy_payout_batch(
+            start_index,
+            &payees,
+            &shares,
+            factory.clone(),
+            client.clone(),
+            gas_price,
+            retries,
+        )
+        .await;
+
+        let _ = match payout_result {
+            Ok(payout) => payout,
+            Err(error) => panic!(
+                "Error deploying batch payout at start index range {:?}:  {:?}",
+                start_index, error
+            ),
+        };
+    }
+
     Ok(())
 }
 
