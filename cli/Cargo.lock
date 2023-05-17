@@ -2275,7 +2275,7 @@ dependencies = [
 [[package]]
 name = "extras"
 version = "0.1.0"
-source = "git+https://github.com/filecoin-saturn/rs-fevm-utils?branch=ac/bump-ethers-v#99825f8e79da252b86104e1a9134a4e7a7e3fcfc"
+source = "git+https://github.com/retrieval-markets-lab/filecoin-signing-tools#640f3335e85c8c00aefa7c3c414406e9e5bb8a0d"
 dependencies = [
  "base64 0.13.1",
  "cid",
@@ -2335,7 +2335,7 @@ dependencies = [
 [[package]]
 name = "fevm-utils"
 version = "0.1.0"
-source = "git+https://github.com/filecoin-saturn/rs-fevm-utils?branch=ac/bump-ethers-v#99825f8e79da252b86104e1a9134a4e7a7e3fcfc"
+source = "git+https://github.com/filecoin-saturn/rs-fevm-utils#5c850005bbe50d7547d2585173ab2bd39c47c011"
 dependencies = [
  "async-recursion",
  "base32",
@@ -2343,7 +2343,7 @@ dependencies = [
  "cid",
  "colog",
  "ethers",
- "extras 0.1.0 (git+https://github.com/filecoin-saturn/rs-fevm-utils?branch=ac/bump-ethers-v)",
+ "extras 0.1.0 (git+https://github.com/retrieval-markets-lab/filecoin-signing-tools)",
  "fil_actor_datacap",
  "fil_actor_eam",
  "fil_actor_evm",
@@ -2351,7 +2351,7 @@ dependencies = [
  "fil_actor_miner",
  "fil_actor_multisig",
  "fil_actors_runtime",
- "filecoin-signer 0.0.0 (git+https://github.com/filecoin-saturn/rs-fevm-utils?branch=ac/bump-ethers-v)",
+ "filecoin-signer 0.0.0 (git+https://github.com/retrieval-markets-lab/filecoin-signing-tools)",
  "fvm",
  "fvm_integration_tests",
  "fvm_ipld_blockstore",
@@ -2711,7 +2711,7 @@ dependencies = [
 [[package]]
 name = "filecoin-signer"
 version = "0.0.0"
-source = "git+https://github.com/filecoin-saturn/rs-fevm-utils?branch=ac/bump-ethers-v#99825f8e79da252b86104e1a9134a4e7a7e3fcfc"
+source = "git+https://github.com/retrieval-markets-lab/filecoin-signing-tools#640f3335e85c8c00aefa7c3c414406e9e5bb8a0d"
 dependencies = [
  "base64 0.13.1",
  "blake2b_simd 0.5.11",
@@ -2719,7 +2719,7 @@ dependencies = [
  "cid",
  "derive_arbitrary",
  "env_logger 0.9.3",
- "extras 0.1.0 (git+https://github.com/filecoin-saturn/rs-fevm-utils?branch=ac/bump-ethers-v)",
+ "extras 0.1.0 (git+https://github.com/retrieval-markets-lab/filecoin-signing-tools)",
  "fil_actor_cron",
  "fil_actor_init",
  "fil_actor_miner",
