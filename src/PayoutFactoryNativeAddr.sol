@@ -57,6 +57,11 @@ contract PayoutFactoryNativeAddr is AccessControl {
         uint256 totalValue
     ) external onlyRole(DEFAULT_ADMIN_ROLE) returns (address instance) {
         // create new payout instance
+        require(
+            payees.length <= 700,
+            "PayoutFactory: payees is longer than 700 not met"
+        );
+
         instance = template.clone();
 
         // register
