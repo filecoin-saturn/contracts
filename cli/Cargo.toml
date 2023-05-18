@@ -9,7 +9,7 @@ contract-bindings = { path= "./bindings" }
 clap = { version = "4.0.32", features = ["derive"] }
 thiserror = "1.0.38"
 ethers = { version = "2", default-features = false, features = ["abigen", "ledger"] }
-fevm-utils = { git = "https://github.com/filecoin-saturn/rs-fevm-utils" }
+fevm-utils = { git = "https://github.com/filecoin-saturn/rs-fevm-utils", ref = "5c85000" }
 tokio = { version = "1.17.0", features = ["macros"] }
 filecoin-signer = { path= "./signer" }
 extras = { path = "./extras" }
@@ -21,6 +21,7 @@ fil_actor_multisig = { version = "10.0.0", git = "https://github.com/filecoin-pr
 fil_actor_evm = { git = "https://github.com/filecoin-project/builtin-actors", tag = "v10.0.0"  }
 log = { version = "0.4.17" }
 colog = { version = "1.1.0" }
+tabled = { version = "0.12.0" }
 csv = "1.2.0"
 dotenv = "0.15.0"
 tokio-postgres = { version = "0.7.7",  features = ["with-chrono-0_4", "with-uuid-0_8"] }

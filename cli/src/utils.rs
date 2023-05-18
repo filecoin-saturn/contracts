@@ -8,11 +8,20 @@ use ethers::types::{Eip1559TransactionRequest, U256};
 
 use csv::{Error as CsvError, Writer};
 use extras::json::tokenamount;
-use filecoin_signer::api::MessageTxAPI;
+use extras::signed_message::ref_fvm::SignedMessage;
+use fevm_utils::filecoin_to_eth_address;
+use fil_actor_multisig::{ProposeParams, TxnID, TxnIDParams};
+use filecoin_signer::api::{MessageParams, MessageTxAPI};
+use fvm_ipld_encoding::to_vec;
+use fvm_ipld_encoding::RawBytes;
+use fvm_shared::address::Address as FilecoinAddress;
+use fvm_shared::bigint::BigInt;
+use fvm_shared::crypto::signature::Signature as FilSignature;
 use fvm_shared::econ::TokenAmount;
 use fvm_shared::message::Message;
 use ledger_filecoin::{BIP44Path, FilecoinApp};
 use ledger_transport_hid::{hidapi::HidApi, TransportNativeHID};
+use serde_json::Value;
 use tokio_postgres::Error as DbError;
 
 use once_cell::sync::Lazy;
@@ -28,16 +37,89 @@ use fevm_utils::{check_address_string, get_wallet_signing_provider, send_tx, set
 use log::info;
 use num_traits::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
+// use serde_derive::Deserialize;
+// use serde_derive::Serialize;
 use std::fs::read_to_string;
 use std::io::{self, Write};
 use std::str::FromStr;
 use std::sync::Arc;
+use tabled::{settings::object::Object, Table, Tabled};
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransactionDetails {
+    #[serde(rename = "/")]
+    pub field: String,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingTxns {
+    #[serde(rename = "/")]
+    pub field: String,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct Code {
+    #[serde(rename = "/")]
+    pub field: String,
+}
+
+fn display_vector<T: std::fmt::Debug>(v: &Vec<T>) -> String {
+    if !v.is_empty() {
+        format!("{:?}", v)
+    } else {
+        String::new()
+    }
+}
+
+fn display_txns(v: &PendingTxns) -> String {
+    format!("{:?}", v)
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize, Tabled)]
+#[serde(rename_all = "PascalCase")]
+pub struct State {
+    start_epoch: u64,
+    unlock_duration: u64,
+    #[serde(rename = "PendingTxns")]
+    #[tabled(display_with = "display_txns")]
+    pub pending_txns: PendingTxns,
+    #[tabled(display_with = "display_vector")]
+    pub signers: Vec<String>,
+    #[serde(rename = "InitialBalance")]
+    pub init_bal: String,
+    #[serde(rename = "NumApprovalsThreshold")]
+    pub threshold: u64,
+    #[serde(rename = "NextTxnID")]
+    pub next_txn_id: u64,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct MultiSigActor {
+    pub balance: String,
+    pub code: Code,
+    pub state: State,
+}
 
 use crate::db::{get_payment_records, get_payment_records_for_finance, PayoutRecords};
 
 pub static ATTO_FIL: Lazy<f64> = Lazy::new(|| 10_f64.powf(18.0));
 
 pub const MAX_PAYEES_PER_PAYOUT: usize = 700;
+
+// MaxFee is set to zero when using MpoolPush
+const MAX_FEE: &str = "0";
+
+const BIP44_PATH: BIP44Path = BIP44Path {
+    purpose: 0x8000_0000 | 44,
+    coin: 0x8000_0000 | 461,
+    account: 0,
+    change: 0,
+    index: 0,
+};
 
 #[derive(thiserror::Error, Debug)]
 pub enum CLIError {
@@ -145,6 +227,176 @@ pub fn write_payout_csv(
     }
 
     Ok(())
+}
+
+pub async fn propose_payout(
+    actor_address: &str,
+    receiver_address: &str,
+    proposer_address: &str,
+    payout_csv: &Option<PathBuf>,
+    db_deploy: &bool,
+    date: &str,
+    provider: &Provider<Http>,
+    rpc_url: &str,
+    filecoin_ledger_app: &FilecoinApp<TransportNativeHID>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let factory_addr_eth = filecoin_to_eth_address(&receiver_address, &rpc_url).await?;
+
+    let propose_call_data = propose_new_payout_callbytes(
+        Arc::new(provider.clone()),
+        &factory_addr_eth,
+        payout_csv,
+        db_deploy,
+        date,
+    )
+    .await?;
+
+    let params: ProposeParams = ProposeParams {
+        to: FilecoinAddress::from_str(&receiver_address).unwrap(),
+        // no transfer of value
+        value: TokenAmount::from_atto(BigInt::from_str("0").unwrap()),
+        method: fil_actor_evm::Method::InvokeContract as u64,
+        params: RawBytes::new(propose_call_data),
+    };
+
+    let nonce = get_nonce(&proposer_address, provider.clone()).await;
+
+    let mut message = Message {
+        version: 0,
+        to: FilecoinAddress::from_str(&actor_address).unwrap(),
+        from: FilecoinAddress::from_str(&proposer_address).unwrap(),
+        sequence: nonce,
+        value: TokenAmount::from_atto(BigInt::from_str("0").unwrap()),
+        gas_limit: 0,
+        gas_fee_cap: TokenAmount::from_atto(BigInt::from_str("0").unwrap()),
+        gas_premium: TokenAmount::from_atto(BigInt::from_str("0").unwrap()),
+        method_num: 2, // Propose is method no 2
+        params: MessageParams::ProposeParams(params).serialize().unwrap(),
+    };
+
+    let gas_info = get_gas_info(message.clone(), provider.clone(), MAX_FEE).await;
+
+    message.gas_limit = gas_info.gas_limit;
+    message.gas_fee_cap = gas_info.gas_fee_cap;
+    message.gas_premium = gas_info.gas_premium;
+
+    let message_bytes = to_vec(&message).unwrap();
+
+    let signature = filecoin_ledger_app
+        .sign(&BIP44_PATH, &message_bytes)
+        .await
+        .unwrap();
+    let sig = signature.sig.to_vec();
+    let signature = FilSignature::new_secp256k1(sig);
+
+    let signed_message: SignedMessage = SignedMessage {
+        message: message,
+        signature: signature,
+    };
+    let signed_message = MessageTxAPI::SignedMessage(signed_message);
+
+    let result: Value = provider
+        .request::<[MessageTxAPI; 1], Value>("Filecoin.MpoolPush", [signed_message])
+        .await
+        .unwrap();
+
+    println!("{:#?}", result);
+    Ok(())
+}
+
+pub async fn approve_payout(
+    actor_address: &str,
+    provider: &Provider<Http>,
+    filecoin_ledger_app: &FilecoinApp<TransportNativeHID>,
+    transaction_id: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let params: TxnIDParams = TxnIDParams {
+        id: TxnID(i64::from_str(&transaction_id).unwrap()),
+        proposal_hash: vec![],
+    };
+
+    let approver_address = filecoin_ledger_app
+        .address(&BIP44_PATH, false)
+        .await
+        .unwrap()
+        .addr_string;
+
+    let nonce = get_nonce(&approver_address, provider.clone()).await;
+
+    let mut message = Message {
+        version: 0,
+        to: FilecoinAddress::from_str(&actor_address)?,
+        from: FilecoinAddress::from_str(&approver_address)?,
+        sequence: nonce,
+        value: TokenAmount::from_atto(BigInt::from_str("0")?),
+        gas_limit: 0,
+        gas_fee_cap: TokenAmount::from_atto(BigInt::from_str("0")?),
+        gas_premium: TokenAmount::from_atto(BigInt::from_str("0")?),
+        method_num: 3, // Approve is method no 3
+        params: MessageParams::TxnIDParams(params).serialize()?,
+    };
+
+    let gas_info = get_gas_info(message.clone(), provider.clone(), MAX_FEE).await;
+
+    message.gas_limit = gas_info.gas_limit;
+    message.gas_fee_cap = gas_info.gas_fee_cap;
+    message.gas_premium = gas_info.gas_premium;
+
+    let message_bytes = to_vec(&message)?;
+
+    let signature = filecoin_ledger_app
+        .sign(&BIP44_PATH, &message_bytes)
+        .await?;
+    let sig = signature.sig.to_vec();
+
+    let signature = FilSignature::new_secp256k1(sig);
+
+    let signed_message: SignedMessage = SignedMessage {
+        message: message,
+        signature: signature,
+    };
+    let signed_message = MessageTxAPI::SignedMessage(signed_message);
+
+    let result: Value = provider
+        .request::<[MessageTxAPI; 1], Value>("Filecoin.MpoolPush", [signed_message])
+        .await
+        .unwrap();
+
+    println!("{:#?}", result);
+    Ok(())
+}
+
+pub async fn inspect_multisig(
+    provider: &Provider<Http>,
+    actor_id: &str,
+) -> Result<MultiSigActor, Box<dyn std::error::Error>> {
+    let params: (&str, ()) = (actor_id, ());
+    let result: Value = provider
+        .request::<(&str, ()), Value>("Filecoin.StateReadState", params)
+        .await?;
+
+    let result: MultiSigActor = serde_json::from_value(result)?;
+
+    let mut table = Table::new(vec![result.clone().state].iter());
+    table.with(tabled::settings::Style::modern());
+    table.with(
+        tabled::settings::Modify::new(
+            tabled::settings::object::Rows::new(1..)
+                .not(tabled::settings::object::Columns::first()),
+        )
+        .with(tabled::settings::Alignment::center()),
+    );
+    table.with(tabled::settings::Shadow::new(1));
+
+    let string = format!(
+        "\n\n  MultiSig {} with balance {} \n\n{}",
+        actor_id,
+        result.balance,
+        table.to_string()
+    );
+
+    info!("{}", string);
+    Ok(result)
 }
 
 pub async fn claim_earnings<S: ::ethers::providers::Middleware + 'static>(
