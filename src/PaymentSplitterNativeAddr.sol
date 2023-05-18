@@ -61,9 +61,14 @@ contract PaymentSplitterNativeAddr is Initializable {
         require(payees_.length > 0, "PaymentSplitter: no payees");
 
         for (uint256 i = 0; i < payees_.length; i++) {
+            require(payees_[i].data.length > 0, "PaymentSplitter: null payee");
             require(
                 FilAddresses.validate(payees_[i]),
                 "PaymentSplitter: invalid Filecoin address"
+            );
+            require(
+                keccak256(payees_[i].data) !=
+                    keccak256(FilAddresses.fromEthAddress(address(this)).data)
             );
             _addPayee(payees_[i], shares_[i]);
         }

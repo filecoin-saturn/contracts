@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 use contract_bindings::payout_factory_native_addr::PAYOUTFACTORYNATIVEADDR_ABI;
 use ethers::core::k256::ecdsa::SigningKey;
 use ethers::middleware::SignerMiddleware;
-use ethers::prelude::{Http, Middleware, Provider};
+use ethers::providers::{Http, Middleware, Provider};
 use ethers::signers::Wallet;
 use ethers::utils::__serde_json::{ser, Value};
 use extras::signed_message::ref_fvm::SignedMessage;
@@ -151,6 +151,7 @@ impl Cli {
             Commands::Claim {
                 factory_addr,
                 addr_to_claim,
+                offset,
             } => {
                 if self.secret.is_some() {
                     let client = get_wallet(self.secret.unwrap(), provider).await?;
@@ -158,6 +159,7 @@ impl Cli {
                         client.clone(),
                         self.retries,
                         gas_price,
+                        ethers::types::U256::from(*offset),
                         factory_addr,
                         addr_to_claim,
                     )
@@ -169,6 +171,7 @@ impl Cli {
                         client.clone(),
                         self.retries,
                         gas_price,
+                        ethers::types::U256::from(*offset),
                         factory_addr,
                         addr_to_claim,
                     )
@@ -368,6 +371,9 @@ pub enum Commands {
         // Address to claim for
         #[arg(short = 'A', long)]
         addr_to_claim: String,
+        // Index from which to start claiming
+        #[arg(short = 'O', long)]
+        offset: usize,
     },
     /// Fund a factory contract
     #[command(arg_required_else_help = true)]

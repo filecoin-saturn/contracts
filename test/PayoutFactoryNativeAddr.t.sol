@@ -48,7 +48,7 @@ contract PayoutFactoryTestNativeAddr is Test {
                 addresses.length
             );
 
-        vm.deal(address(factory), addresses.length * 100001);
+        vm.deal(address(factory), addresses.length * 10001);
 
         for (uint256 i = 0; i < addresses.length; i++) {
             vm.assume(
@@ -62,13 +62,16 @@ contract PayoutFactoryTestNativeAddr is Test {
             fil_addresses[i] = FilAddresses.fromEthAddress(addresses[i]);
         }
 
-        address payoutAddress = factory.payout(fil_addresses, shares);
+        address payoutAddress = factory.payout(
+            fil_addresses,
+            shares,
+            // each address gets 1 Fil
+            addresses.length
+        );
         splitter = PaymentSplitterNativeAddr(payable(payoutAddress));
 
         for (uint256 i = 0; i < addresses.length; i++) {
             vm.assume(addresses[i] != address(splitter));
-            // splitter.release(fil_addresses[i]);
-            // assert(addresses[i].balance == 1);
         }
 
         // now payout again to check we can create a new contract
@@ -76,16 +79,18 @@ contract PayoutFactoryTestNativeAddr is Test {
             shares[i] = 10000;
         }
 
-        address payoutAddress2 = factory.payout(fil_addresses, shares);
+        address payoutAddress2 = factory.payout(
+            fil_addresses,
+            shares,
+            // each address gets 10000 Fil
+            addresses.length * 10000
+        );
         // make sure the current variable has updated accordingly
         assert(payoutAddress != payoutAddress2);
         splitter = PaymentSplitterNativeAddr(payable(payoutAddress2));
 
         for (uint256 i = 0; i < addresses.length; i++) {
             vm.assume(addresses[i] != address(splitter));
-            // splitter.release(fil_addresses[i]);
-            // release 1 + release 2 balance
-            // assert(addresses[i].balance == 10001);
         }
     }
 
@@ -108,7 +113,7 @@ contract PayoutFactoryTestNativeAddr is Test {
         }
 
         factory = new PayoutFactoryNativeAddr(address(this));
-        vm.deal(address(factory), addresses.length * 12);
+        vm.deal(address(factory), addresses.length * 1000);
 
         uint256[] memory shares = new uint256[](addresses.length);
         CommonTypes.FilAddress[]
@@ -123,7 +128,11 @@ contract PayoutFactoryTestNativeAddr is Test {
 
         for (uint256 i = 0; i < 12; i++) {
             // now payout again to check we can create a new contract
-            address payoutAddr = factory.payout(fil_addresses, shares);
+            address payoutAddr = factory.payout(
+                fil_addresses,
+                shares,
+                addresses.length
+            );
             for (uint256 j = 0; j < addresses.length; j++) {
                 vm.assume(addresses[j] != payoutAddr);
             }

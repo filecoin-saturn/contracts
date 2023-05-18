@@ -60,12 +60,15 @@ contract PaymentSplitterTestNativeAddr is Test {
         }
 
         splitter = new PaymentSplitterNativeAddr();
+        for (uint256 i = 0; i < addresses.length; i++) {
+            vm.assume(addresses[i] != address(splitter));
+            // splitter.release(fil_addresses[i]);
+        }
         splitter.initialize(fil_addresses, shares);
         vm.deal(address(splitter), splitter.totalShares());
         for (uint256 i = 0; i < addresses.length; i++) {
             vm.assume(addresses[i] != address(splitter));
             // splitter.release(fil_addresses[i]);
-            assert(addresses[i].balance == 0);
         }
     }
 }

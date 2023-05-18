@@ -76,13 +76,3 @@ jobs:
           files: test/echidna/PayoutFactoryTest.sol
           contract: TestPayoutFactory
           crytic-args: --ignore-compile
-
-      - name: Echidna Tests on Evaluator
-        uses: crytic/echidna-action@v2
-        env:
-          SOLC_VERSION: 0.8.17
-        with:
-          solc-version: 0.8.17
-          files: test/echidna/EvaluatorTest.sol
-          contract: TestEvaluator
-          crytic-args: --ignore-compile

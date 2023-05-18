@@ -55,6 +55,7 @@ contract PaymentSplitter is Initializable {
         require(payees_.length > 0, "PaymentSplitter: no payees");
 
         for (uint256 i = 0; i < payees_.length; i++) {
+            require(payees_[i] != address(this));
             _addPayee(payees_[i], shares_[i]);
         }
     }

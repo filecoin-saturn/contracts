@@ -52,7 +52,9 @@ async fn deploy_payout_factory(executor: &mut TestExecutor) -> Contract {
         .deploy(WASM_COMPILED_PATH, ABI_PATH, Some(&[admin]))
         .unwrap();
 
-    executor.call_fn(&mut contract, "totalShares", &[]).unwrap();
+    executor
+        .call_fn(&mut contract, "totalReleased", &[])
+        .unwrap();
 
     let call = contract.last_call();
     let res = call
@@ -95,7 +97,11 @@ async fn new_payout() {
         .call_fn(
             &mut contract,
             "payout",
-            &[Token::Array(payees), Token::Array(shares)],
+            &[
+                Token::Array(payees),
+                Token::Array(shares),
+                Token::Uint(U256::from(10)),
+            ],
         )
         .unwrap();
 
