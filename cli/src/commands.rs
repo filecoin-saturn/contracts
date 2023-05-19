@@ -16,7 +16,8 @@ use std::sync::Arc;
 
 use crate::utils::{
     approve_payout, cancel_payout, claim_earnings, deploy_factory_contract, fund_factory_contract,
-    generate_monthly_payout, get_filecoin_ledger, inspect_multisig, new_payout, propose_payout,
+    generate_monthly_payout, get_filecoin_ledger, get_pending_transaction_multisig,
+    inspect_multisig, new_payout, propose_payout,
 };
 
 #[allow(missing_docs)]
@@ -227,14 +228,14 @@ impl Cli {
                 .await?;
             }
             Commands::ApproveAll { actor_address } => {
-                let multisig = inspect_multisig(&provider, actor_address).await?;
+                let tx = get_pending_transaction_multisig(&provider, actor_address).await?;
                 let filecoin_ledger_app = get_filecoin_ledger().await;
-                for transaction_id in (0..multisig.state.next_txn_id).rev() {
+                for transaction in tx.iter() {
                     approve_payout(
                         &actor_address,
                         &provider,
                         &filecoin_ledger_app,
-                        &format!("{}", transaction_id),
+                        &format!("{}", transaction.id),
                     )
                     .await?;
                 }

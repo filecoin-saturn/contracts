@@ -66,9 +66,30 @@ pub struct Code {
     pub field: String,
 }
 
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize, Tabled)]
+#[serde(rename_all = "PascalCase")]
+pub struct MultiSigTransaction {
+    #[serde(rename = "ID")]
+    pub id: u64,
+    pub to: String,
+    pub value: String,
+    pub method: u64,
+    #[tabled(display_with = "display_option")]
+    pub params: Option<String>,
+    #[tabled(display_with = "display_vector")]
+    pub approved: Vec<String>,
+}
+
 fn display_vector<T: std::fmt::Debug>(v: &Vec<T>) -> String {
     if !v.is_empty() {
         format!("{:?}", v)
+    } else {
+        String::new()
+    }
+}
+fn display_option<T: std::fmt::Debug>(v: &Option<T>) -> String {
+    if let Some(x) = v {
+        format!("{:?}", x)
     } else {
         String::new()
     }
@@ -405,6 +426,22 @@ pub async fn push_mpool_message(
     Ok(())
 }
 
+pub async fn get_pending_transaction_multisig(
+    provider: &Provider<Http>,
+    actor_id: &str,
+) -> Result<Vec<MultiSigTransaction>, Box<dyn std::error::Error>> {
+    let params: (&str, ()) = (actor_id, ());
+    let result: Value = provider
+        .request::<(&str, ()), Value>("Filecoin.MsigGetPending", params)
+        .await?;
+
+    println!("{:#?}", result);
+
+    let result: Vec<MultiSigTransaction> = serde_json::from_value(result)?;
+
+    Ok(result)
+}
+
 pub async fn inspect_multisig(
     provider: &Provider<Http>,
     actor_id: &str,
@@ -415,6 +452,8 @@ pub async fn inspect_multisig(
         .await?;
 
     let result: MultiSigActor = serde_json::from_value(result)?;
+
+    let pending_tx = get_pending_transaction_multisig(provider, actor_id).await?;
 
     let mut table = Table::new(vec![result.clone().state].iter());
     table.with(tabled::settings::Style::modern());
@@ -435,6 +474,28 @@ pub async fn inspect_multisig(
     );
 
     info!("{}", string);
+
+    for tx in pending_tx.iter() {
+        let mut table = Table::new(vec![tx.clone()].iter());
+        table.with(tabled::settings::Style::modern());
+        table.with(
+            tabled::settings::Modify::new(
+                tabled::settings::object::Rows::new(1..)
+                    .not(tabled::settings::object::Columns::first()),
+            )
+            .with(tabled::settings::Alignment::center()),
+        );
+        table.with(tabled::settings::Shadow::new(1));
+
+        let string = format!(
+            "\n\n  Pending Transaction {} \n\n{}",
+            tx.id,
+            table.to_string()
+        );
+
+        info!("{}", string);
+    }
+
     Ok(result)
 }
 
