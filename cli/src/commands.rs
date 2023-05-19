@@ -15,8 +15,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::utils::{
-    approve_payout, claim_earnings, deploy_factory_contract, fund_factory_contract,
-    generate_monthly_payout, get_filecoin_ledger, inspect_multisig, new_payout, propose_payout,
+    approve_payout, cancel_payout, claim_earnings, deploy_factory_contract, fund_factory_contract,
+    generate_monthly_payout, get_filecoin_ledger, get_pending_transaction_multisig,
+    inspect_multisig, new_payout, propose_payout,
 };
 
 #[allow(missing_docs)]
@@ -124,6 +125,7 @@ impl Cli {
                     .await?;
                 }
             }
+
             Commands::Claim {
                 factory_addr,
                 addr_to_claim,
@@ -182,7 +184,6 @@ impl Cli {
             Commands::ProposeNewPayout {
                 actor_address,
                 receiver_address,
-                proposer_address,
                 payout_csv,
                 db_deploy,
                 date,
@@ -191,13 +192,25 @@ impl Cli {
                 propose_payout(
                     actor_address,
                     receiver_address,
-                    proposer_address,
                     payout_csv,
                     db_deploy,
                     date,
                     &provider,
                     &self.rpc_url,
                     &filecoin_ledger_app,
+                )
+                .await?;
+            }
+            Commands::CancelPayout {
+                actor_address,
+                transaction_id,
+            } => {
+                let filecoin_ledger_app = get_filecoin_ledger().await;
+                cancel_payout(
+                    actor_address,
+                    &provider,
+                    &filecoin_ledger_app,
+                    &transaction_id,
                 )
                 .await?;
             }
@@ -215,14 +228,14 @@ impl Cli {
                 .await?;
             }
             Commands::ApproveAll { actor_address } => {
-                let multisig = inspect_multisig(&provider, actor_address).await?;
+                let tx = get_pending_transaction_multisig(&provider, actor_address).await?;
                 let filecoin_ledger_app = get_filecoin_ledger().await;
-                for transaction_id in (0..multisig.state.next_txn_id).rev() {
+                for transaction in tx.iter() {
                     approve_payout(
                         &actor_address,
                         &provider,
                         &filecoin_ledger_app,
-                        &format!("{}", transaction_id),
+                        &format!("{}", transaction.id),
                     )
                     .await?;
                 }
@@ -305,9 +318,6 @@ pub enum Commands {
         /// Payout Factory Filecoin Address
         #[arg(short = 'M', long)]
         receiver_address: String,
-        /// Sender Filecoin Address
-        #[arg(short = 'S', long)]
-        proposer_address: String,
         #[arg(short = 'C', long)]
         payout_csv: Option<PathBuf>,
         // Flag to determine if this is a db deployment.
@@ -316,6 +326,15 @@ pub enum Commands {
         // Date for the payout period month.
         #[arg(short = 'D', long, default_value = "")]
         date: String,
+    },
+    #[command(arg_required_else_help = true)]
+    CancelPayout {
+        /// Multisig actor id
+        #[arg(short = 'A', long)]
+        actor_address: String,
+        /// Transaction Id
+        #[arg(short = 'T', long)]
+        transaction_id: String,
     },
     #[command(arg_required_else_help = true)]
     ApproveNewPayout {
