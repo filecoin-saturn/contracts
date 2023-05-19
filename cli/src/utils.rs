@@ -75,7 +75,7 @@ fn display_vector<T: std::fmt::Debug>(v: &Vec<T>) -> String {
 }
 
 fn display_txns(v: &PendingTxns) -> String {
-    format!("{:?}", v)
+    format!("{:?}", v.field)
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize, Tabled)]
@@ -232,7 +232,6 @@ pub fn write_payout_csv(
 pub async fn propose_payout(
     actor_address: &str,
     receiver_address: &str,
-    proposer_address: &str,
     payout_csv: &Option<PathBuf>,
     db_deploy: &bool,
     date: &str,
@@ -250,6 +249,12 @@ pub async fn propose_payout(
         date,
     )
     .await?;
+
+    let proposer_address = filecoin_ledger_app
+        .address(&BIP44_PATH, false)
+        .await
+        .unwrap()
+        .addr_string;
 
     let params: ProposeParams = ProposeParams {
         to: FilecoinAddress::from_str(&receiver_address).unwrap(),
@@ -274,33 +279,49 @@ pub async fn propose_payout(
         params: MessageParams::ProposeParams(params).serialize().unwrap(),
     };
 
-    let gas_info = get_gas_info(message.clone(), provider.clone(), MAX_FEE).await;
+    let signed_message: MessageTxAPI =
+        sign_message(provider, filecoin_ledger_app, &mut message).await?;
 
-    message.gas_limit = gas_info.gas_limit;
-    message.gas_fee_cap = gas_info.gas_fee_cap;
-    message.gas_premium = gas_info.gas_premium;
+    push_mpool_message(provider, signed_message).await?;
+    Ok(())
+}
 
-    let message_bytes = to_vec(&message).unwrap();
-
-    let signature = filecoin_ledger_app
-        .sign(&BIP44_PATH, &message_bytes)
-        .await
-        .unwrap();
-    let sig = signature.sig.to_vec();
-    let signature = FilSignature::new_secp256k1(sig);
-
-    let signed_message: SignedMessage = SignedMessage {
-        message: message,
-        signature: signature,
+pub async fn cancel_payout(
+    actor_address: &str,
+    provider: &Provider<Http>,
+    filecoin_ledger_app: &FilecoinApp<TransportNativeHID>,
+    transaction_id: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let params: TxnIDParams = TxnIDParams {
+        id: TxnID(i64::from_str(&transaction_id).unwrap()),
+        proposal_hash: vec![],
     };
-    let signed_message = MessageTxAPI::SignedMessage(signed_message);
 
-    let result: Value = provider
-        .request::<[MessageTxAPI; 1], Value>("Filecoin.MpoolPush", [signed_message])
+    let approver_address = filecoin_ledger_app
+        .address(&BIP44_PATH, false)
         .await
-        .unwrap();
+        .unwrap()
+        .addr_string;
 
-    println!("{:#?}", result);
+    let nonce = get_nonce(&approver_address, provider.clone()).await;
+
+    let mut message = Message {
+        version: 0,
+        to: FilecoinAddress::from_str(&actor_address)?,
+        from: FilecoinAddress::from_str(&approver_address)?,
+        sequence: nonce,
+        value: TokenAmount::from_atto(BigInt::from_str("0")?),
+        gas_limit: 0,
+        gas_fee_cap: TokenAmount::from_atto(BigInt::from_str("0")?),
+        gas_premium: TokenAmount::from_atto(BigInt::from_str("0")?),
+        method_num: 3365893656, // Cancel is method no 3365893656
+        params: MessageParams::TxnIDParams(params).serialize()?,
+    };
+
+    let signed_message: MessageTxAPI =
+        sign_message(provider, filecoin_ledger_app, &mut message).await?;
+
+    push_mpool_message(provider, signed_message).await?;
     Ok(())
 }
 
@@ -336,6 +357,18 @@ pub async fn approve_payout(
         params: MessageParams::TxnIDParams(params).serialize()?,
     };
 
+    let signed_message: MessageTxAPI =
+        sign_message(provider, filecoin_ledger_app, &mut message).await?;
+
+    push_mpool_message(provider, signed_message).await?;
+    Ok(())
+}
+
+pub async fn sign_message(
+    provider: &Provider<Http>,
+    filecoin_ledger_app: &FilecoinApp<TransportNativeHID>,
+    message: &mut Message,
+) -> Result<MessageTxAPI, Box<dyn std::error::Error>> {
     let gas_info = get_gas_info(message.clone(), provider.clone(), MAX_FEE).await;
 
     message.gas_limit = gas_info.gas_limit;
@@ -343,24 +376,30 @@ pub async fn approve_payout(
     message.gas_premium = gas_info.gas_premium;
 
     let message_bytes = to_vec(&message)?;
-
     let signature = filecoin_ledger_app
         .sign(&BIP44_PATH, &message_bytes)
-        .await?;
+        .await
+        .unwrap();
     let sig = signature.sig.to_vec();
 
     let signature = FilSignature::new_secp256k1(sig);
 
     let signed_message: SignedMessage = SignedMessage {
-        message: message,
-        signature: signature,
+        message: Message::default(),
+        signature,
     };
     let signed_message = MessageTxAPI::SignedMessage(signed_message);
 
+    Ok(signed_message)
+}
+
+pub async fn push_mpool_message(
+    provider: &Provider<Http>,
+    signed_message: MessageTxAPI,
+) -> Result<(), Box<dyn std::error::Error>> {
     let result: Value = provider
         .request::<[MessageTxAPI; 1], Value>("Filecoin.MpoolPush", [signed_message])
-        .await
-        .unwrap();
+        .await?;
 
     println!("{:#?}", result);
     Ok(())
