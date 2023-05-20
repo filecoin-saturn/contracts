@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use chrono::{DateTime, Datelike, Month, NaiveDate, Utc};
 use contract_bindings::shared_types::FilAddress;
+use ethers::abi::AbiDecode;
 use ethers::types::{Eip1559TransactionRequest, U256};
 
 use csv::{Error as CsvError, Writer};
@@ -34,7 +35,7 @@ use ethers::providers::{Http, Middleware, Provider};
 use ethers::signers::Wallet;
 use ethers::types::transaction::eip2718::TypedTransaction;
 use fevm_utils::{check_address_string, get_wallet_signing_provider, send_tx, set_tx_gas};
-use log::info;
+use log::{debug, info};
 use num_traits::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
 // use serde_derive::Deserialize;
@@ -422,7 +423,7 @@ pub async fn push_mpool_message(
         .request::<[MessageTxAPI; 1], Value>("Filecoin.MpoolPush", [signed_message])
         .await?;
 
-    println!("{:#?}", result);
+    info!("{:#?}", result);
     Ok(())
 }
 
@@ -434,8 +435,6 @@ pub async fn get_pending_transaction_multisig(
     let result: Value = provider
         .request::<(&str, ()), Value>("Filecoin.MsigGetPending", params)
         .await?;
-
-    println!("{:#?}", result);
 
     let result: Vec<MultiSigTransaction> = serde_json::from_value(result)?;
 
@@ -494,6 +493,16 @@ pub async fn inspect_multisig(
         );
 
         info!("{}", string);
+
+        if let Some(params) = &tx.params {
+            let params: String =
+                RawBytes::from(base64::decode(params.as_bytes())?).deserialize()?;
+            let params =
+                contract_bindings::payout_factory_native_addr::PayoutFactoryNativeAddrCalls::decode(
+                    &params.as_bytes(),
+                );
+            debug!("human readable params {:#?}", params);
+        }
     }
 
     Ok(result)
