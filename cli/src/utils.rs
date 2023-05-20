@@ -423,7 +423,7 @@ pub async fn push_mpool_message(
         .request::<[MessageTxAPI; 1], Value>("Filecoin.MpoolPush", [signed_message])
         .await?;
 
-    println!("{:#?}", result);
+    info!("{:#?}", result);
     Ok(())
 }
 
@@ -435,8 +435,6 @@ pub async fn get_pending_transaction_multisig(
     let result: Value = provider
         .request::<(&str, ()), Value>("Filecoin.MsigGetPending", params)
         .await?;
-
-    println!("{:#?}", result);
 
     let result: Vec<MultiSigTransaction> = serde_json::from_value(result)?;
 
