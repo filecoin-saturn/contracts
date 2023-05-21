@@ -35,7 +35,7 @@ use ethers::providers::{Http, Middleware, Provider};
 use ethers::signers::Wallet;
 use ethers::types::transaction::eip2718::TypedTransaction;
 use fevm_utils::{check_address_string, get_wallet_signing_provider, send_tx, set_tx_gas};
-use log::{debug, info};
+use log::{debug, error, info};
 use num_traits::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
 // use serde_derive::Deserialize;
@@ -501,7 +501,14 @@ pub async fn inspect_multisig(
                 contract_bindings::payout_factory_native_addr::PayoutFactoryNativeAddrCalls::decode(
                     &params.as_bytes(),
                 );
-            debug!("human readable params {:#?}", params);
+            match params {
+                Ok(params) => {
+                    debug!("human readable params {:#?}", params);
+                }
+                Err(_) => {
+                    error!("could not parse params");
+                }
+            }
         }
     }
 
