@@ -15,7 +15,7 @@ use fil_actor_multisig::{ProposeParams, TxnID, TxnIDParams};
 use filecoin_signer::api::{MessageParams, MessageTxAPI};
 use fvm_ipld_encoding::to_vec;
 use fvm_ipld_encoding::RawBytes;
-use fvm_shared::address::Address as FilecoinAddress;
+use fvm_shared::address::{set_current_network, Address as FilecoinAddress, SECP_PUB_LEN};
 use fvm_shared::bigint::BigInt;
 use fvm_shared::crypto::signature::Signature as FilSignature;
 use fvm_shared::econ::TokenAmount;
@@ -906,4 +906,42 @@ pub async fn get_filecoin_ledger() -> FilecoinApp<TransportNativeHID> {
         addr.addr_string
     );
     app
+}
+
+pub fn random_filecoin_address(testnet: bool) -> Result<String, Box<dyn Error>> {
+    let mut rng = ethers::prelude::rand::thread_rng();
+    let mut bytes = [0u8; SECP_PUB_LEN];
+    ethers::prelude::rand::Rng::fill(&mut rng, &mut bytes[..]);
+    let addr = FilecoinAddress::new_secp256k1(&bytes)?;
+    if testnet {
+        set_current_network(fvm_shared::address::Network::Testnet);
+    }
+    Ok(addr.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+
+    #[test]
+    fn test_random_filecoin_address() {
+        for _i in 0..100 {
+            let res = super::random_filecoin_address(false);
+            assert!(res.is_ok());
+        }
+
+        // generate for testnet
+        for _i in 0..100 {
+            let res = super::random_filecoin_address(true);
+            assert!(res.is_ok());
+        }
+
+        const PAYOUT: &str = "Recipient,FIL\nt1ypi542zmmgaltijzw4byonei5c267ev5iif2liy,0.01\n";
+        let mut global_payout = PAYOUT.to_string();
+        for _i in 0..400 {
+            let random_payee = super::random_filecoin_address(true).unwrap();
+            let amount = "0.0001";
+            let payout_str = format!("{},{}\n", random_payee, amount);
+            global_payout = format!("{}{}", global_payout, payout_str);
+        }
+    }
 }
