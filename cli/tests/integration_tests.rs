@@ -1,7 +1,8 @@
 use assert_cmd::prelude::*;
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::NamedTempFile;
-use cli::utils::ATTO_FIL;
+use chrono::format;
+use cli::utils::{random_filecoin_address, ATTO_FIL};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::env;
@@ -102,8 +103,16 @@ fn cli_2_fund() -> Result<(), Box<dyn std::error::Error>> {
 fn cli_3_new_payout() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = get_const_cli_args();
 
+    let mut global_payout = PAYOUT.to_string();
+    for _i in 0..900 {
+        let random_payee = random_filecoin_address(true)?;
+        let amount = "0.0001";
+        let payout_str = format!("{},{}\n", random_payee, amount);
+        global_payout = format!("{}{}", global_payout, payout_str);
+    }
+
     let payouts_csv = assert_fs::NamedTempFile::new("payout.csv")?;
-    payouts_csv.write_str(PAYOUT)?;
+    payouts_csv.write_str(&global_payout)?;
 
     let factory_addr = &FACTORY_ADDRESS.lock().unwrap();
 
