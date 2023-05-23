@@ -214,6 +214,19 @@ impl Cli {
                 )
                 .await?;
             }
+            Commands::CancelAll { actor_address } => {
+                let tx = get_pending_transaction_multisig(&provider, actor_address).await?;
+                let filecoin_ledger_app = get_filecoin_ledger().await;
+                for transaction in tx.iter() {
+                    cancel_payout(
+                        actor_address,
+                        &provider,
+                        &filecoin_ledger_app,
+                        &format!("{}", transaction.id),
+                    )
+                    .await?;
+                }
+            }
             Commands::ApproveNewPayout {
                 actor_address,
                 transaction_id,
@@ -335,6 +348,12 @@ pub enum Commands {
         /// Transaction Id
         #[arg(short = 'T', long)]
         transaction_id: String,
+    },
+    #[command(arg_required_else_help = true)]
+    CancelAll {
+        /// Multisig actor id
+        #[arg(short = 'A', long)]
+        actor_address: String,
     },
     #[command(arg_required_else_help = true)]
     ApproveNewPayout {

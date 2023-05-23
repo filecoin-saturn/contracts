@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use chrono::{DateTime, Datelike, Month, NaiveDate, Utc};
 use contract_bindings::shared_types::FilAddress;
 use ethers::prelude::k256::elliptic_curve::consts::U25;
+use ethers::abi::AbiDecode;
 use ethers::types::{Eip1559TransactionRequest, U256};
 
 use csv::{Error as CsvError, Writer};
@@ -15,7 +16,7 @@ use fil_actor_multisig::{ProposeParams, TxnID, TxnIDParams};
 use filecoin_signer::api::{MessageParams, MessageTxAPI};
 use fvm_ipld_encoding::to_vec;
 use fvm_ipld_encoding::RawBytes;
-use fvm_shared::address::Address as FilecoinAddress;
+use fvm_shared::address::{set_current_network, Address as FilecoinAddress, SECP_PUB_LEN};
 use fvm_shared::bigint::BigInt;
 use fvm_shared::crypto::signature::Signature as FilSignature;
 use fvm_shared::econ::TokenAmount;
@@ -35,7 +36,7 @@ use ethers::providers::{Http, Middleware, Provider};
 use ethers::signers::Wallet;
 use ethers::types::transaction::eip2718::TypedTransaction;
 use fevm_utils::{check_address_string, get_wallet_signing_provider, send_tx, set_tx_gas};
-use log::info;
+use log::{debug, error, info};
 use num_traits::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
 // use serde_derive::Deserialize;
@@ -460,7 +461,7 @@ pub async fn push_mpool_message(
         .request::<[MessageTxAPI; 1], Value>("Filecoin.MpoolPush", [signed_message])
         .await?;
 
-    println!("{:#?}", result);
+    info!("{:#?}", result);
     Ok(())
 }
 
@@ -472,8 +473,6 @@ pub async fn get_pending_transaction_multisig(
     let result: Value = provider
         .request::<(&str, ()), Value>("Filecoin.MsigGetPending", params)
         .await?;
-
-    println!("{:#?}", result);
 
     let result: Vec<MultiSigTransaction> = serde_json::from_value(result)?;
 
@@ -532,6 +531,23 @@ pub async fn inspect_multisig(
         );
 
         info!("{}", string);
+
+        if let Some(params) = &tx.params {
+            let params: String =
+                RawBytes::from(base64::decode(params.as_bytes())?).deserialize()?;
+            let params =
+                contract_bindings::payout_factory_native_addr::PayoutFactoryNativeAddrCalls::decode(
+                    &params.as_bytes(),
+                );
+            match params {
+                Ok(params) => {
+                    debug!("human readable params {:#?}", params);
+                }
+                Err(_) => {
+                    error!("could not parse params");
+                }
+            }
+        }
     }
 
     Ok(result)
@@ -991,4 +1007,42 @@ pub async fn get_filecoin_ledger() -> FilecoinApp<TransportNativeHID> {
         addr.addr_string
     );
     app
+}
+
+pub fn random_filecoin_address(testnet: bool) -> Result<String, Box<dyn Error>> {
+    let mut rng = ethers::prelude::rand::thread_rng();
+    let mut bytes = [0u8; SECP_PUB_LEN];
+    ethers::prelude::rand::Rng::fill(&mut rng, &mut bytes[..]);
+    let addr = FilecoinAddress::new_secp256k1(&bytes)?;
+    if testnet {
+        set_current_network(fvm_shared::address::Network::Testnet);
+    }
+    Ok(addr.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+
+    #[test]
+    fn test_random_filecoin_address() {
+        for _i in 0..100 {
+            let res = super::random_filecoin_address(false);
+            assert!(res.is_ok());
+        }
+
+        // generate for testnet
+        for _i in 0..100 {
+            let res = super::random_filecoin_address(true);
+            assert!(res.is_ok());
+        }
+
+        const PAYOUT: &str = "Recipient,FIL\nt1ypi542zmmgaltijzw4byonei5c267ev5iif2liy,0.01\n";
+        let mut global_payout = PAYOUT.to_string();
+        for _i in 0..400 {
+            let random_payee = super::random_filecoin_address(true).unwrap();
+            let amount = "0.0001";
+            let payout_str = format!("{},{}\n", random_payee, amount);
+            global_payout = format!("{}{}", global_payout, payout_str);
+        }
+    }
 }
