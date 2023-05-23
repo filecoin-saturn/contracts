@@ -192,9 +192,9 @@ impl Cli {
                 propose_payout(
                     actor_address,
                     receiver_address,
-                    payout_csv,
-                    db_deploy,
                     date,
+                    db_deploy,
+                    payout_csv,
                     &provider,
                     &self.rpc_url,
                     &filecoin_ledger_app,

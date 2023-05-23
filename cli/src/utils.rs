@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use chrono::{DateTime, Datelike, Month, NaiveDate, Utc};
 use contract_bindings::shared_types::FilAddress;
+use ethers::prelude::k256::elliptic_curve::consts::U25;
 use ethers::abi::AbiDecode;
 use ethers::types::{Eip1559TransactionRequest, U256};
 
@@ -159,42 +160,7 @@ struct Payment {
 /// calldata is encoding as a byte array of variable length with length encoded by (1, 2, 4, 8 bytes)
 const PARAMS_CBOR_HEADER: [&str; 4] = ["58", "59", "5a", "5b"];
 
-/// Parses payouts from a csv file.
-///
-/// CSV file formatted as such:
-///    Recipient,FIL
-///    f1...,5
-pub async fn parse_payouts_from_csv(
-    payout_csv: &PathBuf,
-) -> Result<(Vec<FilAddress>, Vec<U256>), CsvError> {
-    let mut reader = csv::Reader::from_path(payout_csv)?;
-    let mut shares: Vec<U256> = Vec::new();
-    let mut payees: Vec<FilAddress> = Vec::new();
-
-    for record in reader.deserialize() {
-        let record: Payment = record?;
-        let addr = check_address_string(&record.Recipient).unwrap();
-
-        let payee = FilAddress {
-            data: addr.bytes.into(),
-        };
-
-        let share: U256 = ((record.FIL * &*ATTO_FIL) as u128).into();
-        payees.push(payee);
-        shares.push(share);
-    }
-    Ok((payees, shares))
-}
-
-/// Retrieves and parses payouts from a Postgres database.
-pub async fn parse_payouts_from_db(
-    date: &str,
-    factory_address: &str,
-) -> Result<(Vec<FilAddress>, Vec<U256>), DbError> {
-    let PayoutRecords { payees, shares } = get_payment_records_for_finance(date, factory_address)
-        .await
-        .unwrap();
-
+pub fn parse_payouts(payees: &Vec<String>, shares: &Vec<f64>) -> (Vec<FilAddress>, Vec<U256>) {
     let payees = payees
         .iter()
         .map(|payee| {
@@ -209,6 +175,27 @@ pub async fn parse_payouts_from_db(
         .iter()
         .map(|share| U256::try_from((share * &*ATTO_FIL) as u128).unwrap())
         .collect();
+
+    (payees, shares)
+}
+
+/// Parses payouts from a csv file.
+///
+/// CSV file formatted as such:
+///    Recipient,FIL
+///    f1...,5
+pub async fn parse_raw_payouts_from_csv(
+    payout_csv: &PathBuf,
+) -> Result<(Vec<String>, Vec<f64>), CsvError> {
+    let mut reader = csv::Reader::from_path(payout_csv)?;
+    let mut shares: Vec<f64> = Vec::new();
+    let mut payees: Vec<String> = Vec::new();
+
+    for record in reader.deserialize() {
+        let record: Payment = record?;
+        payees.push(record.Recipient);
+        shares.push(record.FIL);
+    }
     Ok((payees, shares))
 }
 
@@ -245,32 +232,58 @@ pub fn write_payout_csv(
 
     for record in payees.iter().zip(shares.iter()) {
         let (payee, share) = record;
-        csv_writer.write_record(&[payee, &share.to_string(), "0", "nil"])?;
+        csv_writer.write_record(&[
+            payee.to_string(),
+            share.to_string(),
+            String::from("0"),
+            String::from("nil"),
+        ])?;
     }
+    csv_writer.flush()?;
 
     Ok(())
 }
 
-pub async fn propose_payout(
+pub async fn propose_payout_batch(
     actor_address: &str,
     receiver_address: &str,
-    payout_csv: &Option<PathBuf>,
-    db_deploy: &bool,
-    date: &str,
+    payees: &Vec<String>,
+    shares: &Vec<f64>,
+    start_index: usize,
     provider: &Provider<Http>,
     rpc_url: &str,
     filecoin_ledger_app: &FilecoinApp<TransportNativeHID>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let payouts_size = payees.len();
+
+    if start_index >= payouts_size {
+        return Ok(());
+    }
+
+    let end_index = if start_index + MAX_PAYEES_PER_PAYOUT >= payouts_size {
+        payouts_size
+    } else {
+        start_index + MAX_PAYEES_PER_PAYOUT
+    };
+    info!(
+        "Proposing payouts with index range {:?} ... {:?}",
+        start_index, end_index
+    );
+
+    let payees = Vec::from(&payees[start_index..end_index]);
+    let shares = Vec::from(&shares[start_index..end_index]);
+
+    let (parsed_payees, parsed_shares) = parse_payouts(&payees, &shares);
+
     let factory_addr_eth = filecoin_to_eth_address(&receiver_address, &rpc_url).await?;
 
     let propose_call_data = propose_new_payout_callbytes(
         Arc::new(provider.clone()),
         &factory_addr_eth,
-        payout_csv,
-        db_deploy,
-        date,
+        parsed_payees,
+        parsed_shares,
     )
-    .await?;
+    .unwrap();
 
     let proposer_address = filecoin_ledger_app
         .address(&BIP44_PATH, false)
@@ -301,10 +314,35 @@ pub async fn propose_payout(
         params: MessageParams::ProposeParams(params).serialize().unwrap(),
     };
 
-    let signed_message: MessageTxAPI =
-        sign_message(provider, filecoin_ledger_app, &mut message).await?;
+    let signed_message_result = sign_message(provider, filecoin_ledger_app, &mut message).await;
+    let signed_message = match signed_message_result {
+        Ok(message) => message,
+        Err(error) => {
+            let date = chrono::offset::Utc::now().to_string();
+            let file_path = PathBuf::from(&format!("./FailedPayouts{}", date));
+            write_payout_csv(&file_path, &payees, &shares).unwrap();
+            panic!(
+                "Error signing multisig propose message for batch payout at index range {:?} .. {:?}:  {:?}",
+                start_index, end_index, error
+            )
+        }
+    };
 
-    push_mpool_message(provider, signed_message).await?;
+    let mpool_push_result: Result<(), Box<dyn Error>> =
+        push_mpool_message(provider, signed_message).await;
+
+    let _ = match mpool_push_result {
+        Ok(mpool_push) => mpool_push,
+        Err(error) => {
+            let date = chrono::offset::Utc::now().to_string();
+            let file_path = PathBuf::from(&format!("./FailedPayouts{}", date));
+            write_payout_csv(&file_path, &payees, &shares).unwrap();
+            panic!(
+                "MpoolPush error for proposing batch payout at index range {:?} .. {:?}:  {:?}",
+                start_index, end_index, error
+            )
+        }
+    };
     Ok(())
 }
 
@@ -543,10 +581,63 @@ pub async fn claim_earnings<S: ::ethers::providers::Middleware + 'static>(
     Ok(())
 }
 
+pub async fn propose_payout(
+    actor_address: &str,
+    receiver_address: &str,
+    date: &str,
+    db_deploy: &bool,
+    payout_csv: &Option<PathBuf>,
+    provider: &Provider<Http>,
+    rpc_url: &str,
+    filecoin_ledger_app: &FilecoinApp<TransportNativeHID>,
+) -> Result<(), Box<dyn Error>> {
+    let (payees, shares) = get_payout_data(db_deploy, &payout_csv, date, receiver_address)
+        .await
+        .unwrap();
+
+    let total_sum = shares.clone().iter().fold(0_f64, |acc, x| acc + x);
+
+    info!("Total Sum from Payouts: {:?}", total_sum);
+    info!("Total Payee Count: {:?}", payees.len());
+
+    let payout_size: i32 = payees.len() as i32;
+    let batches = if payout_size % (MAX_PAYEES_PER_PAYOUT as i32) == 0 {
+        payout_size / (MAX_PAYEES_PER_PAYOUT as i32)
+    } else {
+        payout_size / (MAX_PAYEES_PER_PAYOUT as i32) + 1
+    };
+
+    info!("Proposing Payouts in {:?} batch deployments \n ", batches);
+    for i in 0..(batches as usize) {
+        let start_index = i * MAX_PAYEES_PER_PAYOUT;
+        let propose_result = propose_payout_batch(
+            actor_address,
+            receiver_address,
+            &payees.clone(),
+            &shares.clone(),
+            start_index,
+            provider,
+            rpc_url,
+            filecoin_ledger_app,
+        )
+        .await;
+
+        let _ = match propose_result {
+            Ok(payout) => payout,
+            Err(error) => panic!(
+                "Error deploying batch payout at start index range {:?}:  {:?}",
+                start_index, error
+            ),
+        };
+    }
+    Ok(())
+}
+
+// Deploys a PaymentSplitter batch of node operator payouts.
 pub async fn deploy_payout_batch<S: Middleware + 'static>(
     start_index: usize,
-    payees: &Vec<FilAddress>,
-    shares: &Vec<U256>,
+    payees: &Vec<String>,
+    shares: &Vec<f64>,
     factory_contract: PayoutFactory<S>,
     client: Arc<S>,
     gas_price: U256,
@@ -571,18 +662,28 @@ pub async fn deploy_payout_batch<S: Middleware + 'static>(
     let payees = Vec::from(&payees[start_index..end_index]);
     let shares = Vec::from(&shares[start_index..end_index]);
 
-    let total_sum = shares.clone().iter().fold(U256::from(0), |acc, x| acc + x);
+    let (parsed_payees, parsed_shares) = parse_payouts(&payees, &shares);
 
-    let mut payout_tx = factory_contract.payout(payees, shares, total_sum);
+    let total_sum = parsed_shares
+        .clone()
+        .iter()
+        .fold(U256::from(0), |acc, x| acc + x);
+
+    let mut payout_tx = factory_contract.payout(parsed_payees, parsed_shares, total_sum);
     let tx = payout_tx.tx.clone();
 
     let gas_estimate_result = client.estimate_gas(&tx, None).await;
     let gas_estimate = match gas_estimate_result {
         Ok(gas) => gas,
-        Err(error) => panic!(
-            "Error estimating gas for batch payout at index range {:?} .. {:?}:  {:?}",
-            start_index, end_index, error
-        ),
+        Err(error) => {
+            let date = chrono::offset::Utc::now().to_string();
+            let file_path = PathBuf::from(&format!("./FailedPayouts{}", date));
+            write_payout_csv(&file_path, &payees, &shares).unwrap();
+            panic!(
+                "Error estimating gas for batch payout at index range {:?} .. {:?}:  {:?}",
+                start_index, end_index, error
+            )
+        }
     };
     set_tx_gas(&mut payout_tx.tx, gas_estimate, gas_price);
 
@@ -595,10 +696,15 @@ pub async fn deploy_payout_batch<S: Middleware + 'static>(
 
     let receipt = match receipt_result {
         Ok(receipt) => receipt,
-        Err(error) => panic!(
-            "Error deploying batch payout at index range {:?} .. {:?}:  {:?}",
-            start_index, end_index, error
-        ),
+        Err(error) => {
+            let date = chrono::offset::Utc::now().to_string();
+            let file_path = PathBuf::from(&format!("./FailedPayouts{}", date));
+            write_payout_csv(&file_path, &payees, &shares).unwrap();
+            panic!(
+                "Error deploying batch payout at index range {:?} .. {:?}:  {:?}",
+                start_index, end_index, error
+            )
+        }
     };
 
     info!(
@@ -618,26 +724,14 @@ pub async fn new_payout<S: Middleware + 'static>(
     date: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let addr = Address::from_str(factory_addr)?;
-    let payees;
-    let shares;
 
-    if *db_deploy {
-        (payees, shares) = parse_payouts_from_db(date, factory_addr).await.unwrap();
-    } else {
-        (payees, shares) = match payout_csv {
-            Some(csv_path) => parse_payouts_from_csv(csv_path).await.unwrap(),
-            None => {
-                panic!("Either payout-csv or db-deployment must be defined as CLI args")
-            }
-        }
-    }
+    let (payees, shares) = get_payout_data(db_deploy, &payout_csv, date, factory_addr)
+        .await
+        .unwrap();
 
-    let total_sum = shares.clone().iter().fold(U256::from(0), |acc, x| acc + x);
+    let total_sum = shares.clone().iter().fold(0_f64, |acc, x| acc + x);
 
-    info!(
-        "Total Sum from Payouts: {:?}",
-        total_sum.as_u128() as f64 / ATTO_FIL.to_f64().unwrap()
-    );
+    info!("Total Sum from Payouts: {:?}", total_sum);
     info!("Total Payee Count: {:?}", payees.len());
 
     let factory: PayoutFactory<S> = PayoutFactory::new(addr, client.clone());
@@ -676,29 +770,36 @@ pub async fn new_payout<S: Middleware + 'static>(
     Ok(())
 }
 
-pub async fn propose_new_payout_callbytes<S: Middleware + 'static>(
+async fn get_payout_data(
+    db_deploy: &bool,
+    csv_path: &Option<PathBuf>,
+    date: &str,
+    factory_addr: &str,
+) -> Result<(Vec<String>, Vec<f64>), Box<dyn Error>> {
+    if *db_deploy {
+        let db_payout_records = get_payment_records_for_finance(date, factory_addr)
+            .await
+            .unwrap();
+        return Ok((db_payout_records.payees, db_payout_records.shares));
+    } else {
+        let (payees, shares) = match csv_path {
+            Some(csv_path) => parse_raw_payouts_from_csv(csv_path).await.unwrap(),
+            None => {
+                panic!("Either payout-csv or db-deployment must be defined as CLI args");
+            }
+        };
+        return Ok((payees, shares));
+    }
+}
+
+pub fn propose_new_payout_callbytes<S: Middleware + 'static>(
     client: Arc<S>,
     factory_addr: &str,
-    payout_csv: &Option<PathBuf>,
-    db_deploy: &bool,
-    date: &str,
+    payees: Vec<FilAddress>,
+    shares: Vec<U256>,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let addr = Address::from_str(factory_addr)?;
     let factory = PayoutFactory::new(addr, client.clone());
-
-    let payees;
-    let shares;
-
-    if *db_deploy {
-        (payees, shares) = parse_payouts_from_db(date, factory_addr).await.unwrap();
-    } else {
-        (payees, shares) = match payout_csv {
-            Some(csv_path) => parse_payouts_from_csv(csv_path).await.unwrap(),
-            None => {
-                panic!("Either payout-csv or db-deployment must be defined as CLI args")
-            }
-        }
-    }
 
     let total_sum = shares.clone().iter().fold(U256::from(0), |acc, x| acc + x);
 
