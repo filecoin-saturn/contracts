@@ -4,7 +4,6 @@ use std::path::PathBuf;
 
 use chrono::{DateTime, Datelike, Month, NaiveDate, Utc};
 use contract_bindings::shared_types::FilAddress;
-use ethers::prelude::k256::elliptic_curve::consts::U25;
 use ethers::abi::AbiDecode;
 use ethers::types::{Eip1559TransactionRequest, U256};
 
@@ -995,9 +994,10 @@ pub async fn get_filecoin_ledger() -> FilecoinApp<TransportNativeHID> {
     let app =
         FilecoinApp::new(TransportNativeHID::new(&hid_api).expect("unable to create transport"));
     let path = BIP44Path {
-        purpose: 0x8000_0000 | 44,
-        coin: 0x8000_0000 | 461,
-        account: 0,
+        // The purpose of the 0x8000_0000 is to add the apostrophe(') in a BipPath
+        purpose: 44 | 0x8000_0000,
+        coin: 461 | 0x8000_0000,
+        account: 0 | 0x8000_0000,
         change: 0,
         index: 0,
     };
