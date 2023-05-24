@@ -104,7 +104,7 @@ fn cli_3_new_payout() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = get_const_cli_args();
 
     let mut global_payout = PAYOUT.to_string();
-    for _i in 0..900 {
+    for _i in 0..5000 {
         let random_payee = random_filecoin_address(true)?;
         let amount = "0.0001";
         let payout_str = format!("{},{}\n", random_payee, amount);
