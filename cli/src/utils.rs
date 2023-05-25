@@ -23,7 +23,6 @@ use fvm_shared::message::Message;
 use ledger_filecoin::{BIP44Path, FilecoinApp};
 use ledger_transport_hid::{hidapi::HidApi, TransportNativeHID};
 use serde_json::Value;
-use tokio_postgres::Error as DbError;
 
 use once_cell::sync::Lazy;
 
@@ -36,16 +35,15 @@ use ethers::signers::Wallet;
 use ethers::types::transaction::eip2718::TypedTransaction;
 use fevm_utils::{check_address_string, get_wallet_signing_provider, send_tx, set_tx_gas};
 use log::{debug, error, info};
-use num_traits::{FromPrimitive, ToPrimitive};
+use num_traits::FromPrimitive;
 use serde::{Deserialize, Serialize};
-// use serde_derive::Deserialize;
-// use serde_derive::Serialize;
 use std::fs::read_to_string;
 use std::io::{self, Write};
 use std::str::FromStr;
 use std::sync::Arc;
 use tabled::{settings::object::Object, Table, Tabled};
 
+const ADMIN_ROLE: [u8; 32] = [0; 32];
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TransactionDetails {
@@ -575,6 +573,35 @@ pub async fn claim_earnings<S: ::ethers::providers::Middleware + 'static>(
     );
 
     info!("estimated claim gas cost {:#?}", claim_tx.tx.gas().unwrap());
+
+    send_tx(&claim_tx.tx, client, retries).await?;
+    Ok(())
+}
+
+pub async fn grant_admin<S: ::ethers::providers::Middleware + 'static>(
+    client: Arc<S>,
+    retries: usize,
+    gas_price: U256,
+    factory_addr: &str,
+    address_to_grant: &str,
+    rpc_url: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let addr = Address::from_str(factory_addr)?;
+    let factory: PayoutFactory<_> = PayoutFactory::new(addr, client.clone());
+    let address_to_grant = filecoin_to_eth_address(address_to_grant, rpc_url)
+        .await
+        .unwrap();
+    let address_to_grant = Address::from_str(address_to_grant.as_str())?;
+
+    let mut claim_tx = factory.grant_role(ADMIN_ROLE.into(), address_to_grant);
+    let tx = claim_tx.tx.clone();
+    set_tx_gas(
+        &mut claim_tx.tx,
+        client.estimate_gas(&tx, None).await?,
+        gas_price,
+    );
+
+    info!("estimated grant gas cost {:#?}", claim_tx.tx.gas().unwrap());
 
     send_tx(&claim_tx.tx, client, retries).await?;
     Ok(())
