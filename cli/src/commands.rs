@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use crate::utils::{
     approve_payout, cancel_payout, claim_earnings, deploy_factory_contract, fund_factory_contract,
-    generate_monthly_payout, get_filecoin_ledger, get_pending_transaction_multisig,
+    generate_monthly_payout, get_filecoin_ledger, get_pending_transaction_multisig, grant_admin,
     inspect_multisig, new_payout, propose_payout,
 };
 
@@ -253,6 +253,35 @@ impl Cli {
                     .await?;
                 }
             }
+            Commands::GrantAdmin {
+                address,
+                factory_addr,
+            } => {
+                if self.secret.is_some() {
+                    let client = get_wallet(self.secret.unwrap(), provider).await?;
+                    grant_admin(
+                        client.clone(),
+                        self.retries,
+                        gas_price,
+                        factory_addr,
+                        address,
+                        &self.rpc_url,
+                    )
+                    .await?;
+                } else {
+                    let client = get_ledger_signing_provider(provider, chain_id.as_u64()).await?;
+                    let client = Arc::new(client);
+                    grant_admin(
+                        client.clone(),
+                        self.retries,
+                        gas_price,
+                        factory_addr,
+                        address,
+                        &self.rpc_url,
+                    )
+                    .await?;
+                }
+            }
         }
         Ok(())
     }
@@ -369,5 +398,14 @@ pub enum Commands {
         /// Multisig actor id
         #[arg(short = 'A', long)]
         actor_address: String,
+    },
+    #[command(arg_required_else_help = true)]
+    GrantAdmin {
+        /// Address to grant role to
+        #[arg(short = 'A', long)]
+        address: String,
+        /// PayoutFactory ethereum address.
+        #[arg(short = 'F', long)]
+        factory_addr: String,
     },
 }
