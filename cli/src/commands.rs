@@ -16,8 +16,8 @@ use std::sync::Arc;
 
 use crate::utils::{
     approve_payout, cancel_payout, claim_earnings, deploy_factory_contract, fund_factory_contract,
-    generate_monthly_payout, get_filecoin_ledger, get_pending_transaction_multisig, grant_admin,
-    inspect_multisig, new_payout, propose_payout,
+    generate_monthly_payout, get_pending_transaction_multisig, get_signing_method_and_address,
+    grant_admin, inspect_multisig, new_payout, propose_payout,
 };
 
 #[allow(missing_docs)]
@@ -187,8 +187,11 @@ impl Cli {
                 payout_csv,
                 db_deploy,
                 date,
+                ledger,
             } => {
-                let filecoin_ledger_app = get_filecoin_ledger().await;
+                let (signing_method, signer_address) =
+                    get_signing_method_and_address(ledger).await.unwrap();
+
                 propose_payout(
                     actor_address,
                     receiver_address,
@@ -197,32 +200,42 @@ impl Cli {
                     payout_csv,
                     &provider,
                     &self.rpc_url,
-                    &filecoin_ledger_app,
+                    signing_method,
+                    &signer_address,
                 )
                 .await?;
             }
             Commands::CancelPayout {
                 actor_address,
                 transaction_id,
+                ledger,
             } => {
-                let filecoin_ledger_app = get_filecoin_ledger().await;
+                let (signing_method, signer_address) =
+                    get_signing_method_and_address(ledger).await.unwrap();
+
                 cancel_payout(
                     actor_address,
                     &provider,
-                    &filecoin_ledger_app,
                     &transaction_id,
+                    &signing_method,
+                    &signer_address,
                 )
                 .await?;
             }
-            Commands::CancelAll { actor_address } => {
+            Commands::CancelAll {
+                actor_address,
+                ledger,
+            } => {
                 let tx = get_pending_transaction_multisig(&provider, actor_address).await?;
-                let filecoin_ledger_app = get_filecoin_ledger().await;
+                let (signing_method, signer_address) =
+                    get_signing_method_and_address(ledger).await.unwrap();
                 for transaction in tx.iter() {
                     cancel_payout(
                         actor_address,
                         &provider,
-                        &filecoin_ledger_app,
                         &format!("{}", transaction.id),
+                        &signing_method,
+                        &signer_address,
                     )
                     .await?;
                 }
@@ -230,24 +243,33 @@ impl Cli {
             Commands::ApproveNewPayout {
                 actor_address,
                 transaction_id,
+                ledger,
             } => {
-                let filecoin_ledger_app = get_filecoin_ledger().await;
+                let (signing_method, signer_address) =
+                    get_signing_method_and_address(ledger).await.unwrap();
+
                 approve_payout(
                     &actor_address,
                     &provider,
-                    &filecoin_ledger_app,
+                    &signing_method,
+                    &signer_address,
                     transaction_id,
                 )
                 .await?;
             }
-            Commands::ApproveAll { actor_address } => {
+            Commands::ApproveAll {
+                actor_address,
+                ledger,
+            } => {
                 let tx = get_pending_transaction_multisig(&provider, actor_address).await?;
-                let filecoin_ledger_app = get_filecoin_ledger().await;
+                let (signing_method, signer_address) =
+                    get_signing_method_and_address(ledger).await.unwrap();
                 for transaction in tx.iter() {
                     approve_payout(
                         &actor_address,
                         &provider,
-                        &filecoin_ledger_app,
+                        &signing_method,
+                        &signer_address,
                         &format!("{}", transaction.id),
                     )
                     .await?;
@@ -362,12 +384,15 @@ pub enum Commands {
         receiver_address: String,
         #[arg(short = 'C', long)]
         payout_csv: Option<PathBuf>,
-        // Flag to determine if this is a db deployment.
+        /// Flag to determine if this is a db deployment.
         #[arg(long, conflicts_with = "payout_csv", default_value_t = false)]
         db_deploy: bool,
-        // Date for the payout period month.
+        /// Date for the payout period month.
         #[arg(short = 'D', long, default_value = "")]
         date: String,
+        /// Ledger Flag
+        #[arg(short = 'L', default_value_t = false)]
+        ledger: bool,
     },
     #[command(arg_required_else_help = true)]
     CancelPayout {
@@ -377,12 +402,18 @@ pub enum Commands {
         /// Transaction Id
         #[arg(short = 'T', long)]
         transaction_id: String,
+        /// Ledger Flag
+        #[arg(short = 'L', default_value_t = false)]
+        ledger: bool,
     },
     #[command(arg_required_else_help = true)]
     CancelAll {
         /// Multisig actor id
         #[arg(short = 'A', long)]
         actor_address: String,
+        /// Ledger Flag
+        #[arg(short = 'L', default_value_t = false)]
+        ledger: bool,
     },
     #[command(arg_required_else_help = true)]
     ApproveNewPayout {
@@ -392,12 +423,18 @@ pub enum Commands {
         /// Transaction Id
         #[arg(short = 'T', long)]
         transaction_id: String,
+        /// Ledger Flag
+        #[arg(short = 'L', default_value_t = false)]
+        ledger: bool,
     },
     #[command(arg_required_else_help = true)]
     ApproveAll {
         /// Multisig actor id
         #[arg(short = 'A', long)]
         actor_address: String,
+        /// Ledger Flag
+        #[arg(short = 'L', default_value_t = false)]
+        ledger: bool,
     },
     #[command(arg_required_else_help = true)]
     GrantAdmin {
