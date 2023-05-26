@@ -13,6 +13,7 @@ use extras::signed_message::ref_fvm::SignedMessage;
 use fevm_utils::filecoin_to_eth_address;
 use fil_actor_multisig::{ProposeParams, TxnID, TxnIDParams};
 use filecoin_signer::api::{MessageParams, MessageTxAPI};
+use filecoin_signer::{transaction_sign, PrivateKey};
 use fvm_ipld_encoding::to_vec;
 use fvm_ipld_encoding::RawBytes;
 use fvm_shared::address::{set_current_network, Address as FilecoinAddress, SECP_PUB_LEN};
@@ -22,6 +23,8 @@ use fvm_shared::econ::TokenAmount;
 use fvm_shared::message::Message;
 use ledger_filecoin::{BIP44Path, FilecoinApp};
 use ledger_transport_hid::{hidapi::HidApi, TransportNativeHID};
+use libsecp256k1::{PublicKey, SecretKey};
+use rpassword::read_password;
 use serde_json::Value;
 
 use once_cell::sync::Lazy;
@@ -134,9 +137,10 @@ pub const MAX_PAYEES_PER_PAYOUT: usize = 700;
 const MAX_FEE: &str = "0";
 
 const BIP44_PATH: BIP44Path = BIP44Path {
-    purpose: 0x8000_0000 | 44,
-    coin: 0x8000_0000 | 461,
-    account: 0,
+    // The purpose of the 0x8000_0000 is to add the apostrophe(') in a BipPath
+    purpose: 44 | 0x8000_0000,
+    coin: 461 | 0x8000_0000,
+    account: 0 | 0x8000_0000,
     change: 0,
     index: 0,
 };
@@ -241,6 +245,50 @@ pub fn write_payout_csv(
     Ok(())
 }
 
+pub async fn get_signing_method_and_address(
+    use_ledger: &bool,
+) -> Result<(SignatureMethod, String), Box<dyn Error>> {
+    let signing_method;
+
+    if *use_ledger {
+        let filecoin_ledger_app = get_filecoin_ledger().await;
+
+        let address = filecoin_ledger_app
+            .address(&BIP44_PATH, false)
+            .await
+            .unwrap()
+            .addr_string;
+
+        signing_method = SignatureMethod::LedgerApp(filecoin_ledger_app);
+
+        info!("Signing with address: {:?}", address.clone());
+
+        Ok((signing_method, address))
+    } else {
+        info!("Insert your private key to sign (it will not be displayed for security reasons): ",);
+
+        let _ = io::stdout().flush().unwrap();
+        let mut private_key = read_password().unwrap();
+        private_key = String::from(private_key.trim());
+
+        let private_key_res = PrivateKey::try_from(private_key);
+
+        let private_key = match private_key_res {
+            Ok(private_key) => private_key,
+            Err(err) => panic!("Error parsing private key: {:?}", err),
+        };
+
+        let secret_key = SecretKey::parse_slice(&private_key.0)?;
+        let public_key = PublicKey::from_secret_key(&secret_key);
+        let address = FilecoinAddress::new_secp256k1(&public_key.serialize().to_vec()).unwrap();
+
+        signing_method = SignatureMethod::PrivateKey(private_key);
+        info!("Signing with address: {:?}", address.to_string());
+
+        Ok((signing_method, address.to_string()))
+    }
+}
+
 pub async fn propose_payout_batch(
     actor_address: &str,
     receiver_address: &str,
@@ -249,7 +297,8 @@ pub async fn propose_payout_batch(
     start_index: usize,
     provider: &Provider<Http>,
     rpc_url: &str,
-    filecoin_ledger_app: &FilecoinApp<TransportNativeHID>,
+    signature_method: &SignatureMethod,
+    signer_address: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let payouts_size = payees.len();
 
@@ -282,12 +331,6 @@ pub async fn propose_payout_batch(
     )
     .unwrap();
 
-    let proposer_address = filecoin_ledger_app
-        .address(&BIP44_PATH, false)
-        .await
-        .unwrap()
-        .addr_string;
-
     let params: ProposeParams = ProposeParams {
         to: FilecoinAddress::from_str(&receiver_address).unwrap(),
         // no transfer of value
@@ -296,12 +339,12 @@ pub async fn propose_payout_batch(
         params: RawBytes::new(propose_call_data),
     };
 
-    let nonce = get_nonce(&proposer_address, provider.clone()).await;
+    let nonce = get_nonce(&signer_address, provider.clone()).await;
 
     let mut message = Message {
         version: 0,
         to: FilecoinAddress::from_str(&actor_address).unwrap(),
-        from: FilecoinAddress::from_str(&proposer_address).unwrap(),
+        from: FilecoinAddress::from_str(&signer_address).unwrap(),
         sequence: nonce,
         value: TokenAmount::from_atto(BigInt::from_str("0").unwrap()),
         gas_limit: 0,
@@ -311,7 +354,7 @@ pub async fn propose_payout_batch(
         params: MessageParams::ProposeParams(params).serialize().unwrap(),
     };
 
-    let signed_message_result = sign_message(provider, filecoin_ledger_app, &mut message).await;
+    let signed_message_result = sign_message(provider, signature_method, &mut message).await;
     let signed_message = match signed_message_result {
         Ok(message) => message,
         Err(error) => {
@@ -346,26 +389,21 @@ pub async fn propose_payout_batch(
 pub async fn cancel_payout(
     actor_address: &str,
     provider: &Provider<Http>,
-    filecoin_ledger_app: &FilecoinApp<TransportNativeHID>,
     transaction_id: &str,
+    signing_method: &SignatureMethod,
+    signing_address: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let params: TxnIDParams = TxnIDParams {
         id: TxnID(i64::from_str(&transaction_id).unwrap()),
         proposal_hash: vec![],
     };
 
-    let approver_address = filecoin_ledger_app
-        .address(&BIP44_PATH, false)
-        .await
-        .unwrap()
-        .addr_string;
-
-    let nonce = get_nonce(&approver_address, provider.clone()).await;
+    let nonce = get_nonce(&signing_address, provider.clone()).await;
 
     let mut message = Message {
         version: 0,
         to: FilecoinAddress::from_str(&actor_address)?,
-        from: FilecoinAddress::from_str(&approver_address)?,
+        from: FilecoinAddress::from_str(&signing_address)?,
         sequence: nonce,
         value: TokenAmount::from_atto(BigInt::from_str("0")?),
         gas_limit: 0,
@@ -375,8 +413,7 @@ pub async fn cancel_payout(
         params: MessageParams::TxnIDParams(params).serialize()?,
     };
 
-    let signed_message: MessageTxAPI =
-        sign_message(provider, filecoin_ledger_app, &mut message).await?;
+    let signed_message: MessageTxAPI = sign_message(provider, signing_method, &mut message).await?;
 
     push_mpool_message(provider, signed_message).await?;
     Ok(())
@@ -385,7 +422,8 @@ pub async fn cancel_payout(
 pub async fn approve_payout(
     actor_address: &str,
     provider: &Provider<Http>,
-    filecoin_ledger_app: &FilecoinApp<TransportNativeHID>,
+    signing_method: &SignatureMethod,
+    signing_address: &str,
     transaction_id: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let params: TxnIDParams = TxnIDParams {
@@ -393,18 +431,12 @@ pub async fn approve_payout(
         proposal_hash: vec![],
     };
 
-    let approver_address = filecoin_ledger_app
-        .address(&BIP44_PATH, false)
-        .await
-        .unwrap()
-        .addr_string;
-
-    let nonce = get_nonce(&approver_address, provider.clone()).await;
+    let nonce = get_nonce(&signing_address, provider.clone()).await;
 
     let mut message = Message {
         version: 0,
         to: FilecoinAddress::from_str(&actor_address)?,
-        from: FilecoinAddress::from_str(&approver_address)?,
+        from: FilecoinAddress::from_str(&signing_address)?,
         sequence: nonce,
         value: TokenAmount::from_atto(BigInt::from_str("0")?),
         gas_limit: 0,
@@ -414,16 +446,20 @@ pub async fn approve_payout(
         params: MessageParams::TxnIDParams(params).serialize()?,
     };
 
-    let signed_message: MessageTxAPI =
-        sign_message(provider, filecoin_ledger_app, &mut message).await?;
+    let signed_message: MessageTxAPI = sign_message(provider, signing_method, &mut message).await?;
 
     push_mpool_message(provider, signed_message).await?;
     Ok(())
 }
 
+pub enum SignatureMethod {
+    LedgerApp(FilecoinApp<TransportNativeHID>),
+    PrivateKey(PrivateKey),
+}
+
 pub async fn sign_message(
     provider: &Provider<Http>,
-    filecoin_ledger_app: &FilecoinApp<TransportNativeHID>,
+    signature_method: &SignatureMethod,
     message: &mut Message,
 ) -> Result<MessageTxAPI, Box<dyn std::error::Error>> {
     let gas_info = get_gas_info(message.clone(), provider.clone(), MAX_FEE).await;
@@ -432,21 +468,30 @@ pub async fn sign_message(
     message.gas_fee_cap = gas_info.gas_fee_cap;
     message.gas_premium = gas_info.gas_premium;
 
-    let message_bytes = to_vec(&message)?;
-    let signature = filecoin_ledger_app
-        .sign(&BIP44_PATH, &message_bytes)
-        .await
-        .unwrap();
-    let sig = signature.sig.to_vec();
+    let message_bytes = to_vec(&message).unwrap();
 
-    let signature = FilSignature::new_secp256k1(sig);
+    let signed_message;
 
-    let signed_message: SignedMessage = SignedMessage {
-        message: Message::default(),
-        signature,
-    };
+    match signature_method {
+        SignatureMethod::LedgerApp(ledger_app) => {
+            let signature = ledger_app.sign(&BIP44_PATH, &message_bytes).await.unwrap();
+            let recovery_id = signature.v;
+            let mut sig = signature.sig.to_vec();
+            sig.push(recovery_id);
+
+            let signature = FilSignature::new_secp256k1(sig);
+
+            signed_message = SignedMessage {
+                message: message.clone(),
+                signature,
+            };
+        }
+        SignatureMethod::PrivateKey(private_key) => {
+            signed_message = transaction_sign(&message, &private_key).unwrap();
+        }
+    }
+
     let signed_message = MessageTxAPI::SignedMessage(signed_message);
-
     Ok(signed_message)
 }
 
@@ -615,7 +660,8 @@ pub async fn propose_payout(
     payout_csv: &Option<PathBuf>,
     provider: &Provider<Http>,
     rpc_url: &str,
-    filecoin_ledger_app: &FilecoinApp<TransportNativeHID>,
+    signature_method: SignatureMethod,
+    signer_address: &str,
 ) -> Result<(), Box<dyn Error>> {
     let (payees, shares) = get_payout_data(db_deploy, &payout_csv, date, receiver_address)
         .await
@@ -644,14 +690,15 @@ pub async fn propose_payout(
             start_index,
             provider,
             rpc_url,
-            filecoin_ledger_app,
+            &signature_method,
+            signer_address,
         )
         .await;
 
         let _ = match propose_result {
             Ok(payout) => payout,
             Err(error) => panic!(
-                "Error deploying batch payout at start index range {:?}:  {:?}",
+                "Error proposing batch payout at start index range {:?}:  {:?}",
                 start_index, error
             ),
         };
@@ -843,7 +890,7 @@ pub fn propose_new_payout_callbytes<S: Middleware + 'static>(
         .collect::<Vec<u8>>();
     let mut params = hex::decode(PARAMS_CBOR_HEADER[num_bytes.len() - 1])?;
     params.extend(num_bytes);
-    params.extend(call_bytes);
+    params.extend(call_bytes.clone());
 
     Ok(params)
 }
@@ -1020,15 +1067,8 @@ pub async fn get_filecoin_ledger() -> FilecoinApp<TransportNativeHID> {
 
     let app =
         FilecoinApp::new(TransportNativeHID::new(&hid_api).expect("unable to create transport"));
-    let path = BIP44Path {
-        // The purpose of the 0x8000_0000 is to add the apostrophe(') in a BipPath
-        purpose: 44 | 0x8000_0000,
-        coin: 461 | 0x8000_0000,
-        account: 0 | 0x8000_0000,
-        change: 0,
-        index: 0,
-    };
-    let addr = app.address(&path, false).await.unwrap();
+
+    let addr = app.address(&BIP44_PATH, false).await.unwrap();
     info!(
         "Connected to Filecoin Ledger on address: {:#?}",
         addr.addr_string
