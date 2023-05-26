@@ -445,13 +445,4 @@ pub enum Commands {
         #[arg(short = 'F', long)]
         factory_addr: String,
     },
-    #[command(arg_required_else_help = true)]
-    GrantAdmin {
-        /// Address to grant role to
-        #[arg(short = 'A', long)]
-        address: String,
-        /// PayoutFactory ethereum address.
-        #[arg(short = 'F', long)]
-        factory_addr: String,
-    },
 }
