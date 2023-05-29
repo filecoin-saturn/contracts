@@ -15,9 +15,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::utils::{
-    approve_payout, cancel_payout, claim_earnings, deploy_factory_contract, fund_factory_contract,
-    generate_monthly_payout, get_pending_transaction_multisig, get_signing_method_and_address,
-    grant_admin, inspect_multisig, new_payout, propose_payout,
+    approve_payout, cancel_payout, claim_earnings, claim_earnings_filecoin_signing,
+    deploy_factory_contract, fund_factory_contract, generate_monthly_payout,
+    get_pending_transaction_multisig, get_signing_method_and_address, grant_admin,
+    inspect_earnings, inspect_multisig, new_payout, propose_payout, SigningOptions,
 };
 
 #[allow(missing_docs)]
@@ -130,32 +131,50 @@ impl Cli {
                 factory_addr,
                 addr_to_claim,
                 offset,
-            } => {
-                if self.secret.is_some() {
-                    let client = get_wallet(self.secret.unwrap(), provider).await?;
-                    claim_earnings(
-                        client.clone(),
-                        self.retries,
-                        gas_price,
-                        ethers::types::U256::from(*offset),
+                method,
+            } => match method {
+                Some(option) => {
+                    let (signing_method, signer_address) =
+                        get_signing_method_and_address(option).await.unwrap();
+
+                    claim_earnings_filecoin_signing(
+                        &provider.clone(),
                         factory_addr,
                         addr_to_claim,
+                        &signing_method,
+                        &signer_address,
+                        &self.rpc_url,
                     )
-                    .await?;
-                } else {
-                    let client = get_ledger_signing_provider(provider, chain_id.as_u64()).await?;
-                    let client = Arc::new(client);
-                    claim_earnings(
-                        client.clone(),
-                        self.retries,
-                        gas_price,
-                        ethers::types::U256::from(*offset),
-                        factory_addr,
-                        addr_to_claim,
-                    )
-                    .await?;
+                    .await?
                 }
-            }
+                None => {
+                    if self.secret.is_some() {
+                        let client = get_wallet(self.secret.unwrap(), provider).await?;
+                        claim_earnings(
+                            client.clone(),
+                            self.retries,
+                            gas_price,
+                            ethers::types::U256::from(*offset),
+                            factory_addr,
+                            addr_to_claim,
+                        )
+                        .await?;
+                    } else {
+                        let client =
+                            get_ledger_signing_provider(provider, chain_id.as_u64()).await?;
+                        let client = Arc::new(client);
+                        claim_earnings(
+                            client.clone(),
+                            self.retries,
+                            gas_price,
+                            ethers::types::U256::from(*offset),
+                            factory_addr,
+                            addr_to_claim,
+                        )
+                        .await?;
+                    }
+                }
+            },
             Commands::Fund {
                 factory_addr,
                 amount,
@@ -187,10 +206,10 @@ impl Cli {
                 payout_csv,
                 db_deploy,
                 date,
-                ledger,
+                method,
             } => {
                 let (signing_method, signer_address) =
-                    get_signing_method_and_address(ledger).await.unwrap();
+                    get_signing_method_and_address(method).await.unwrap();
 
                 propose_payout(
                     actor_address,
@@ -208,10 +227,10 @@ impl Cli {
             Commands::CancelPayout {
                 actor_address,
                 transaction_id,
-                ledger,
+                method,
             } => {
                 let (signing_method, signer_address) =
-                    get_signing_method_and_address(ledger).await.unwrap();
+                    get_signing_method_and_address(method).await.unwrap();
 
                 cancel_payout(
                     actor_address,
@@ -224,11 +243,11 @@ impl Cli {
             }
             Commands::CancelAll {
                 actor_address,
-                ledger,
+                method,
             } => {
                 let tx = get_pending_transaction_multisig(&provider, actor_address).await?;
                 let (signing_method, signer_address) =
-                    get_signing_method_and_address(ledger).await.unwrap();
+                    get_signing_method_and_address(method).await.unwrap();
                 for transaction in tx.iter() {
                     cancel_payout(
                         actor_address,
@@ -243,10 +262,10 @@ impl Cli {
             Commands::ApproveNewPayout {
                 actor_address,
                 transaction_id,
-                ledger,
+                method,
             } => {
                 let (signing_method, signer_address) =
-                    get_signing_method_and_address(ledger).await.unwrap();
+                    get_signing_method_and_address(method).await.unwrap();
 
                 approve_payout(
                     &actor_address,
@@ -259,11 +278,11 @@ impl Cli {
             }
             Commands::ApproveAll {
                 actor_address,
-                ledger,
+                method,
             } => {
                 let tx = get_pending_transaction_multisig(&provider, actor_address).await?;
                 let (signing_method, signer_address) =
-                    get_signing_method_and_address(ledger).await.unwrap();
+                    get_signing_method_and_address(method).await.unwrap();
                 for transaction in tx.iter() {
                     approve_payout(
                         &actor_address,
@@ -304,6 +323,13 @@ impl Cli {
                     .await?;
                 }
             }
+            Commands::InspectEarnings {
+                address,
+                factory_address,
+            } => {
+                let provider = get_provider(&self.rpc_url).unwrap();
+                inspect_earnings(&provider, address, factory_address).await;
+            }
         }
         Ok(())
     }
@@ -339,8 +365,10 @@ pub enum Commands {
         #[arg(short = 'A', long)]
         addr_to_claim: String,
         // Index from which to start claiming
-        #[arg(short = 'O', long)]
+        #[arg(short = 'O', long, default_value = "1")]
         offset: usize,
+        #[arg(short = 'M', long)]
+        method: Option<SigningOptions>,
     },
     /// Fund a factory contract
     #[command(arg_required_else_help = true)]
@@ -375,6 +403,15 @@ pub enum Commands {
         actor_id: String,
     },
     #[command(arg_required_else_help = true)]
+    InspectEarnings {
+        /// Address to insepct
+        #[arg(short = 'A', long)]
+        address: String,
+        /// Address to insepct
+        #[arg(short = 'F', long)]
+        factory_address: String,
+    },
+    #[command(arg_required_else_help = true)]
     ProposeNewPayout {
         /// Multisig actor id
         #[arg(short = 'A', long)]
@@ -390,9 +427,9 @@ pub enum Commands {
         /// Date for the payout period month.
         #[arg(short = 'D', long, default_value = "")]
         date: String,
-        /// Ledger Flag
-        #[arg(short = 'L', default_value_t = false)]
-        ledger: bool,
+        /// Signing Method for the command.
+        #[arg(long, default_value = "local", value_enum)]
+        method: SigningOptions,
     },
     #[command(arg_required_else_help = true)]
     CancelPayout {
@@ -402,18 +439,18 @@ pub enum Commands {
         /// Transaction Id
         #[arg(short = 'T', long)]
         transaction_id: String,
-        /// Ledger Flag
-        #[arg(short = 'L', default_value_t = false)]
-        ledger: bool,
+        /// Signing Method for the command.
+        #[arg(long, default_value = "local", value_enum)]
+        method: SigningOptions,
     },
     #[command(arg_required_else_help = true)]
     CancelAll {
         /// Multisig actor id
         #[arg(short = 'A', long)]
         actor_address: String,
-        /// Ledger Flag
-        #[arg(short = 'L', default_value_t = false)]
-        ledger: bool,
+        /// Signing Method for the command.
+        #[arg(long, default_value = "local", value_enum)]
+        method: SigningOptions,
     },
     #[command(arg_required_else_help = true)]
     ApproveNewPayout {
@@ -423,18 +460,18 @@ pub enum Commands {
         /// Transaction Id
         #[arg(short = 'T', long)]
         transaction_id: String,
-        /// Ledger Flag
-        #[arg(short = 'L', default_value_t = false)]
-        ledger: bool,
+        /// Signing Method for the command.
+        #[arg(long, default_value = "local", value_enum)]
+        method: SigningOptions,
     },
     #[command(arg_required_else_help = true)]
     ApproveAll {
         /// Multisig actor id
         #[arg(short = 'A', long)]
         actor_address: String,
-        /// Ledger Flag
-        #[arg(short = 'L', default_value_t = false)]
-        ledger: bool,
+        /// Signing Method for the command.
+        #[arg(long, default_value = "local", value_enum)]
+        method: SigningOptions,
     },
     #[command(arg_required_else_help = true)]
     GrantAdmin {
