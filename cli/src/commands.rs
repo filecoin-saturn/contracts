@@ -18,7 +18,7 @@ use crate::utils::{
     approve_payout, cancel_payout, claim_earnings, claim_earnings_filecoin_signing,
     deploy_factory_contract, fund_factory_contract, generate_monthly_payout,
     get_pending_transaction_multisig, get_signing_method_and_address, grant_admin,
-    inspect_multisig, new_payout, propose_payout, SigningOptions,
+    inspect_earnings, inspect_multisig, new_payout, propose_payout, SigningOptions,
 };
 
 #[allow(missing_docs)]
@@ -323,6 +323,13 @@ impl Cli {
                     .await?;
                 }
             }
+            Commands::InspectEarnings {
+                address,
+                factory_address,
+            } => {
+                let provider = get_provider(&self.rpc_url).unwrap();
+                inspect_earnings(&provider, address, factory_address).await;
+            }
         }
         Ok(())
     }
@@ -394,6 +401,15 @@ pub enum Commands {
         /// Multisig actor id
         #[arg(short = 'A', long)]
         actor_id: String,
+    },
+    #[command(arg_required_else_help = true)]
+    InspectEarnings {
+        /// Address to insepct
+        #[arg(short = 'A', long)]
+        address: String,
+        /// Address to insepct
+        #[arg(short = 'F', long)]
+        factory_address: String,
     },
     #[command(arg_required_else_help = true)]
     ProposeNewPayout {

@@ -39,7 +39,7 @@ use ethers::signers::Wallet;
 use ethers::types::transaction::eip2718::TypedTransaction;
 use fevm_utils::{check_address_string, get_wallet_signing_provider, send_tx, set_tx_gas};
 use log::{debug, error, info};
-use num_traits::FromPrimitive;
+use num_traits::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use std::fs::read_to_string;
 use std::io::{self, Write};
@@ -84,6 +84,15 @@ pub struct MultiSigTransaction {
     pub params: Option<String>,
     #[tabled(display_with = "display_vector")]
     pub approved: Vec<String>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize, Tabled)]
+#[serde(rename_all = "PascalCase")]
+pub struct PayoutInformation {
+    #[serde(rename = "Total Shares")]
+    pub shares: f64,
+    pub released: f64,
+    pub releasable: f64,
 }
 
 fn display_vector<T: std::fmt::Debug>(v: &Vec<T>) -> String {
@@ -465,7 +474,7 @@ pub async fn claim_earnings_filecoin_signing(
     let factory = PayoutFactory::new(addr, client);
 
     let call_bytes = factory
-        .release_all(release_addr, U256::from(1))
+        .release_all(release_addr, U256::from(0))
         .calldata()
         .unwrap()
         .to_vec();
@@ -637,6 +646,54 @@ pub async fn get_pending_transaction_multisig(
     let result: Vec<MultiSigTransaction> = serde_json::from_value(result)?;
 
     Ok(result)
+}
+
+pub async fn inspect_earnings(provider: &Provider<Http>, address: &str, factory_address: &str) {
+    let contract_addr = Address::from_str(factory_address).unwrap();
+
+    let client = Arc::new(provider.clone());
+    let contract = PayoutFactory::new(contract_addr, client);
+
+    let address_data = check_address_string(address).unwrap();
+
+    let fil_addr = FilAddress {
+        data: address_data.bytes.into(),
+    };
+
+    let releasable = contract.releasable(fil_addr.clone()).call().await.unwrap();
+    let releasable = releasable.as_u64().to_f64().unwrap() / &*ATTO_FIL;
+
+    let released = contract.released(fil_addr.clone()).await.unwrap();
+    let released = released.as_u64().to_f64().unwrap() / &*ATTO_FIL;
+
+    let shares = releasable + released;
+
+    let payout_info = PayoutInformation {
+        shares,
+        releasable,
+        released,
+    };
+
+    info!("{:?}", payout_info);
+
+    let mut table = Table::new(vec![payout_info.clone()].iter());
+    table.with(tabled::settings::Style::modern());
+    table.with(
+        tabled::settings::Modify::new(
+            tabled::settings::object::Rows::new(1..)
+                .not(tabled::settings::object::Columns::first()),
+        )
+        .with(tabled::settings::Alignment::center()),
+    );
+    table.with(tabled::settings::Shadow::new(1));
+
+    let string = format!(
+        "\n\n  Inspecting Earnings for address: {} \n\n{}",
+        address,
+        table.to_string(),
+    );
+
+    info!("{}", string);
 }
 
 pub async fn inspect_multisig(
