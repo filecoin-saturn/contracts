@@ -38,3 +38,4 @@ ledger-filecoin = { git = 'https://github.com/retrieval-markets-lab/ledger-filec
 ledger-transport-hid = "0.9.0"
 rpassword = "7.2.0"
 base64 = "0.21.0"
+url = "^2.3.1"

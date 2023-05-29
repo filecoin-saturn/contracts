@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
+use std::process::Command;
 
 use chrono::{DateTime, Datelike, Month, NaiveDate, Utc};
 use contract_bindings::shared_types::FilAddress;
@@ -33,7 +34,7 @@ use contract_bindings::payout_factory_native_addr::PayoutFactoryNativeAddr as Pa
 use ethers::abi::Address;
 use ethers::core::k256::ecdsa::SigningKey;
 use ethers::middleware::SignerMiddleware;
-use ethers::providers::{Http, Middleware, Provider};
+use ethers::providers::{Http, JsonRpcClient, Middleware, Provider};
 use ethers::signers::Wallet;
 use ethers::types::transaction::eip2718::TypedTransaction;
 use fevm_utils::{check_address_string, get_wallet_signing_provider, send_tx, set_tx_gas};
@@ -45,8 +46,11 @@ use std::io::{self, Write};
 use std::str::FromStr;
 use std::sync::Arc;
 use tabled::{settings::object::Object, Table, Tabled};
+use url::Url;
 
 const ADMIN_ROLE: [u8; 32] = [0; 32];
+
+const LOTUS_RPC_URL: &str = "http://127.0.0.1:1234/rpc/v1";
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TransactionDetails {
@@ -246,46 +250,67 @@ pub fn write_payout_csv(
 }
 
 pub async fn get_signing_method_and_address(
-    use_ledger: &bool,
+    method: &SigningOptions,
 ) -> Result<(SignatureMethod, String), Box<dyn Error>> {
     let signing_method;
 
-    if *use_ledger {
-        let filecoin_ledger_app = get_filecoin_ledger().await;
+    match method {
+        SigningOptions::Ledger => {
+            let filecoin_ledger_app = get_filecoin_ledger().await;
 
-        let address = filecoin_ledger_app
-            .address(&BIP44_PATH, false)
-            .await
-            .unwrap()
-            .addr_string;
+            let address = filecoin_ledger_app
+                .address(&BIP44_PATH, false)
+                .await
+                .unwrap()
+                .addr_string;
 
-        signing_method = SignatureMethod::LedgerApp(filecoin_ledger_app);
+            signing_method = SignatureMethod::LedgerApp(filecoin_ledger_app);
 
-        info!("Signing with address: {:?}", address.clone());
+            info!("Signing with address: {:?}", address.clone());
 
-        Ok((signing_method, address))
-    } else {
-        info!("Insert your private key to sign (it will not be displayed for security reasons): ",);
+            Ok((signing_method, address))
+        }
+        SigningOptions::Lotus => {
+            let token = get_lotus_signing_token().await.unwrap();
 
-        let _ = io::stdout().flush().unwrap();
-        let mut private_key = read_password().unwrap();
-        private_key = String::from(private_key.trim());
+            let url: Url = Url::parse(LOTUS_RPC_URL).unwrap();
+            let lotus_node_provider =
+                Http::new_with_auth(url, ethers::providers::Authorization::bearer(token.trim()))
+                    .unwrap();
 
-        let private_key_res = PrivateKey::try_from(private_key);
+            let address = lotus_node_provider
+                .request::<(), String>("Filecoin.WalletDefaultAddress", ())
+                .await?;
 
-        let private_key = match private_key_res {
-            Ok(private_key) => private_key,
-            Err(err) => panic!("Error parsing private key: {:?}", err),
-        };
+            signing_method = SignatureMethod::Lotus(lotus_node_provider, address.clone());
 
-        let secret_key = SecretKey::parse_slice(&private_key.0)?;
-        let public_key = PublicKey::from_secret_key(&secret_key);
-        let address = FilecoinAddress::new_secp256k1(&public_key.serialize().to_vec()).unwrap();
+            Ok((signing_method, address))
+        }
+        SigningOptions::Local => {
+            info!(
+                "Insert your private key to sign (it will not be displayed for security reasons): ",
+            );
 
-        signing_method = SignatureMethod::PrivateKey(private_key);
-        info!("Signing with address: {:?}", address.to_string());
+            let _ = io::stdout().flush().unwrap();
+            let mut private_key = read_password().unwrap();
+            private_key = String::from(private_key.trim());
 
-        Ok((signing_method, address.to_string()))
+            let private_key_res = PrivateKey::try_from(private_key);
+
+            let private_key = match private_key_res {
+                Ok(private_key) => private_key,
+                Err(err) => panic!("Error parsing private key: {:?}", err),
+            };
+
+            let secret_key = SecretKey::parse_slice(&private_key.0)?;
+            let public_key = PublicKey::from_secret_key(&secret_key);
+            let address = FilecoinAddress::new_secp256k1(&public_key.serialize().to_vec()).unwrap();
+
+            signing_method = SignatureMethod::PrivateKey(private_key);
+            info!("Signing with address: {:?}", address.to_string());
+
+            Ok((signing_method, address.to_string()))
+        }
     }
 }
 
@@ -419,6 +444,63 @@ pub async fn cancel_payout(
     Ok(())
 }
 
+pub async fn claim_earnings_filecoin_signing(
+    provider: &Provider<Http>,
+    factory_addr: &str,
+    release_address: &str,
+    signing_method: &SignatureMethod,
+    signing_address: &str,
+    rpc_url: &str,
+) -> Result<(), Box<dyn Error>> {
+    let factory_eth_addr = filecoin_to_eth_address(factory_addr, rpc_url)
+        .await
+        .unwrap();
+
+    let addr = Address::from_str(factory_eth_addr.as_str()).unwrap();
+    let release_addr = FilAddress {
+        data: check_address_string(release_address).unwrap().bytes.into(),
+    };
+
+    let client = Arc::new(provider.clone());
+    let factory = PayoutFactory::new(addr, client);
+
+    let call_bytes = factory
+        .release_all(release_addr, U256::from(1))
+        .calldata()
+        .unwrap()
+        .to_vec();
+
+    let num_bytes = call_bytes.len().to_be_bytes();
+    let num_bytes = num_bytes
+        .iter()
+        .filter(|x| **x != 0)
+        .map(|x| x.clone())
+        .collect::<Vec<u8>>();
+    let mut params = hex::decode(PARAMS_CBOR_HEADER[num_bytes.len() - 1])?;
+    params.extend(num_bytes);
+    params.extend(call_bytes.clone());
+
+    let nonce = get_nonce(&signing_address, provider.clone()).await;
+
+    let mut message = Message {
+        version: 0,
+        to: FilecoinAddress::from_str(&factory_addr)?,
+        from: FilecoinAddress::from_str(&signing_address)?,
+        sequence: nonce,
+        value: TokenAmount::from_atto(BigInt::from_str("0")?),
+        gas_limit: 0,
+        gas_fee_cap: TokenAmount::from_atto(BigInt::from_str("0")?),
+        gas_premium: TokenAmount::from_atto(BigInt::from_str("0")?),
+        method_num: 3844450837, // InvokeContract is method no 3844450837
+        params: RawBytes::new(params),
+    };
+
+    let signed_message: MessageTxAPI = sign_message(provider, signing_method, &mut message).await?;
+
+    push_mpool_message(provider, signed_message).await?;
+    Ok(())
+}
+
 pub async fn approve_payout(
     actor_address: &str,
     provider: &Provider<Http>,
@@ -455,6 +537,14 @@ pub async fn approve_payout(
 pub enum SignatureMethod {
     LedgerApp(FilecoinApp<TransportNativeHID>),
     PrivateKey(PrivateKey),
+    Lotus(Http, String),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, clap::ValueEnum)]
+pub enum SigningOptions {
+    Lotus,
+    Ledger,
+    Local,
 }
 
 pub async fn sign_message(
@@ -470,7 +560,7 @@ pub async fn sign_message(
 
     let message_bytes = to_vec(&message).unwrap();
 
-    let signed_message;
+    let signed_message: MessageTxAPI;
 
     match signature_method {
         SignatureMethod::LedgerApp(ledger_app) => {
@@ -481,18 +571,46 @@ pub async fn sign_message(
 
             let signature = FilSignature::new_secp256k1(sig);
 
-            signed_message = SignedMessage {
+            signed_message = MessageTxAPI::SignedMessage(SignedMessage {
                 message: message.clone(),
                 signature,
-            };
+            });
         }
         SignatureMethod::PrivateKey(private_key) => {
-            signed_message = transaction_sign(&message, &private_key).unwrap();
+            signed_message =
+                MessageTxAPI::SignedMessage(transaction_sign(&message, &private_key).unwrap());
+        }
+        SignatureMethod::Lotus(provider, signer_address) => {
+            let message_tx: MessageTxAPI = MessageTxAPI::Message(message.clone());
+            signed_message = provider
+                .request::<(&str, MessageTxAPI), MessageTxAPI>(
+                    "Filecoin.WalletSignMessage",
+                    (signer_address, message_tx),
+                )
+                .await?;
         }
     }
-
-    let signed_message = MessageTxAPI::SignedMessage(signed_message);
     Ok(signed_message)
+}
+
+/// Generates a signing token from a locus local node. The token is used to sign
+/// messages using the lotus node.
+pub async fn get_lotus_signing_token() -> Result<String, Box<dyn Error>> {
+    let output = Command::new("lotus")
+        .arg("auth")
+        .arg("create-token")
+        .arg("--perm")
+        .arg("sign")
+        .output()
+        .expect("Failed to extract signing token from lotus");
+
+    if !output.status.success() {
+        panic!("Failed to extract signing token from lotus");
+    }
+
+    let token = String::from_utf8_lossy(&output.stdout).to_string();
+
+    Ok(token)
 }
 
 pub async fn push_mpool_message(
