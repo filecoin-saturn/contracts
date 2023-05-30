@@ -5,7 +5,9 @@ use ethers::middleware::SignerMiddleware;
 use ethers::providers::{Http, Middleware, Provider};
 use ethers::signers::Wallet;
 use ethers::utils::__serde_json::ser;
-use fevm_utils::{get_ledger_signing_provider, get_provider, get_wallet_signing_provider};
+use fevm_utils::{
+    filecoin_to_eth_address, get_ledger_signing_provider, get_provider, get_wallet_signing_provider,
+};
 
 use log::info;
 use serde::{Deserialize, Serialize};
@@ -148,6 +150,8 @@ impl Cli {
                     .await?
                 }
                 None => {
+                    let factory_eth_addr =
+                        filecoin_to_eth_address(&factory_addr, &self.rpc_url).await?;
                     if self.secret.is_some() {
                         let client = get_wallet(self.secret.unwrap(), provider).await?;
                         claim_earnings(
@@ -155,7 +159,7 @@ impl Cli {
                             self.retries,
                             gas_price,
                             ethers::types::U256::from(*offset),
-                            factory_addr,
+                            &factory_eth_addr,
                             addr_to_claim,
                         )
                         .await?;
@@ -327,8 +331,10 @@ impl Cli {
                 address,
                 factory_address,
             } => {
+                let factory_eth_addr =
+                    filecoin_to_eth_address(&factory_address, &self.rpc_url).await?;
                 let provider = get_provider(&self.rpc_url).unwrap();
-                inspect_earnings(&provider, address, factory_address).await;
+                inspect_earnings(&provider, address, &factory_eth_addr).await;
             }
         }
         Ok(())
@@ -358,7 +364,7 @@ pub enum Commands {
     /// Claims all available funds for a given address
     #[command(arg_required_else_help = true)]
     Claim {
-        /// PayoutFactory ethereum address.
+        /// PayoutFactory Filecoin address.
         #[arg(short = 'F', long)]
         factory_addr: String,
         // Address to claim for
@@ -407,13 +413,13 @@ pub enum Commands {
         /// Address to insepct
         #[arg(short = 'A', long)]
         address: String,
-        /// Address to insepct
+        /// Multisig Filecoin Actor Id or Address
         #[arg(short = 'F', long)]
         factory_address: String,
     },
     #[command(arg_required_else_help = true)]
     ProposeNewPayout {
-        /// Multisig actor id
+        /// Multisig Filecoin Actor Id or Address
         #[arg(short = 'A', long)]
         actor_address: String,
         /// Payout Factory Filecoin Address
@@ -433,7 +439,7 @@ pub enum Commands {
     },
     #[command(arg_required_else_help = true)]
     CancelPayout {
-        /// Multisig actor id
+        /// Multisig Filecoin Actor Id or Address
         #[arg(short = 'A', long)]
         actor_address: String,
         /// Transaction Id
@@ -445,7 +451,7 @@ pub enum Commands {
     },
     #[command(arg_required_else_help = true)]
     CancelAll {
-        /// Multisig actor id
+        /// Multisig Filecoin Actor Id or Address
         #[arg(short = 'A', long)]
         actor_address: String,
         /// Signing Method for the command.
@@ -454,7 +460,7 @@ pub enum Commands {
     },
     #[command(arg_required_else_help = true)]
     ApproveNewPayout {
-        /// Multisig actor id
+        /// Multisig Filecoin Actor Id or Address
         #[arg(short = 'A', long)]
         actor_address: String,
         /// Transaction Id
@@ -466,7 +472,7 @@ pub enum Commands {
     },
     #[command(arg_required_else_help = true)]
     ApproveAll {
-        /// Multisig actor id
+        /// Multisig Filecoin Actor Id or Address
         #[arg(short = 'A', long)]
         actor_address: String,
         /// Signing Method for the command.
@@ -478,7 +484,7 @@ pub enum Commands {
         /// Address to grant role to
         #[arg(short = 'A', long)]
         address: String,
-        /// PayoutFactory ethereum address.
+        /// PayoutFactory Ethereum address.
         #[arg(short = 'F', long)]
         factory_addr: String,
     },

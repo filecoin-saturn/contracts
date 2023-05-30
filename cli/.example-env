@@ -1,0 +1,8 @@
+# RPC URL for the Filecoin Network.
+RPC_URL="https://api.node.glif.io"
+# Address of the Saturn Payouts Smart Contract
+CONTRACT_FIL_ADDRESS=""
+# Filecoin Address that is used for a Saturn Node.
+NODE_FIL_ADDRESS=""
+# An address that is used to claim earnings for a saturn node.
+CLAIM_ADDRESS=""
