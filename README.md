@@ -131,6 +131,35 @@ forge bind  --select "(?:^|\W)PayoutFactoryNativeAddr|PaymentSplitterNativeAddr(
 
 ## Cli
 
+
+#### Installation 
+
+First install 
+
+```bash 
+curl https://sh.rustup.rs -sSf | sh
+
+```
+
+Then install the cli by running: 
+
+```bash
+cargo install --path cli
+```
+
+Alternatively you can install without cloning this repo: 
+
+```bash
+cargo install --git https://github.com/filecoin-saturn/contracts cli 
+```
+
+
+You can then get cli usage help using: 
+
+```bash 
+saturn-contracts --help 
+```
+
 ---
 **Note:**
 
