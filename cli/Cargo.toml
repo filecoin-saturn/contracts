@@ -10,7 +10,7 @@ clap = { version = "4.0.32", features = ["derive"] }
 thiserror = "1.0.38"
 ethers = { version = "2", default-features = false, features = ["abigen", "ledger"] }
 fevm-utils = { git = "https://github.com/filecoin-saturn/rs-fevm-utils", ref = "5c85000" }
-tokio = { version = "1.17.0", features = ["macros"] }
+tokio = { version = "1.17.0", features = ["macros", "rt-multi-thread", "rt"] }
 filecoin-signer = { path= "./signer" }
 extras = { path = "./extras" }
 fvm_ipld_encoding = "0.3.3"
