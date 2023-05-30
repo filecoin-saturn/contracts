@@ -147,6 +147,13 @@ Then install the cli by running:
 cargo install --path cli
 ```
 
+Alternatively you can install without cloning this repo: 
+
+```bash
+cargo install --git https://github.com/filecoin-saturn/contracts cli 
+```
+
+
 You can then get cli usage help using: 
 
 ```bash 
