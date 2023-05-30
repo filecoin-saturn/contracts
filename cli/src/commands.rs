@@ -402,12 +402,14 @@ pub enum Commands {
         #[arg(short = 'F', long)]
         factory_address: String,
     },
+    /// Returns State and Pending Transactions of a Multisig Contract
     #[command(arg_required_else_help = true)]
     MultisigInspect {
         /// Multisig actor id
         #[arg(short = 'A', long)]
         actor_id: String,
     },
+    /// Returns Payout stats for a given node filecoin address
     #[command(arg_required_else_help = true)]
     InspectEarnings {
         /// Address to insepct
@@ -417,6 +419,8 @@ pub enum Commands {
         #[arg(short = 'F', long)]
         factory_address: String,
     },
+    /// Proposes a new payout deployment to a multisig address and
+    /// a factory contract address
     #[command(arg_required_else_help = true)]
     ProposeNewPayout {
         /// Multisig Filecoin Actor Id or Address
@@ -437,6 +441,7 @@ pub enum Commands {
         #[arg(long, default_value = "local", value_enum)]
         method: SigningOptions,
     },
+    /// Cancels a proposed payout on a multisig actor identified by its transaction Id
     #[command(arg_required_else_help = true)]
     CancelPayout {
         /// Multisig Filecoin Actor Id or Address
@@ -449,6 +454,7 @@ pub enum Commands {
         #[arg(long, default_value = "local", value_enum)]
         method: SigningOptions,
     },
+    /// Cancels all proposed payouts on a multisig actor
     #[command(arg_required_else_help = true)]
     CancelAll {
         /// Multisig Filecoin Actor Id or Address
@@ -458,6 +464,7 @@ pub enum Commands {
         #[arg(long, default_value = "local", value_enum)]
         method: SigningOptions,
     },
+    /// Approves a proposed payout on a multisig address by its transaction Id
     #[command(arg_required_else_help = true)]
     ApproveNewPayout {
         /// Multisig Filecoin Actor Id or Address
@@ -470,6 +477,7 @@ pub enum Commands {
         #[arg(long, default_value = "local", value_enum)]
         method: SigningOptions,
     },
+    /// Approves all proposed payouts on a multisig actor
     #[command(arg_required_else_help = true)]
     ApproveAll {
         /// Multisig Filecoin Actor Id or Address
@@ -479,6 +487,8 @@ pub enum Commands {
         #[arg(long, default_value = "local", value_enum)]
         method: SigningOptions,
     },
+    /// Grants an admin role to a payout factory contract. The issuing address
+    /// has to be an admin on the contract.
     #[command(arg_required_else_help = true)]
     GrantAdmin {
         /// Address to grant role to
