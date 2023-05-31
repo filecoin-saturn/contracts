@@ -273,13 +273,16 @@ pub async fn get_signing_method_and_address(
         SigningOptions::Ledger => {
             let filecoin_ledger_app = get_filecoin_ledger(ledger_account).await;
 
+            let mut bip_path = BIP44_PATH;
+            bip_path.account = ledger_account | 0x8000_0000;
+
             let address = filecoin_ledger_app
-                .address(&BIP44_PATH, false)
+                .address(&bip_path, false)
                 .await
                 .unwrap()
                 .addr_string;
 
-            signing_method = SignatureMethod::LedgerApp(filecoin_ledger_app);
+            signing_method = SignatureMethod::LedgerApp(filecoin_ledger_app, bip_path);
 
             info!("Signing with address: {:?}", address.clone());
 
@@ -550,7 +553,7 @@ pub async fn approve_payout(
 }
 
 pub enum SignatureMethod {
-    LedgerApp(FilecoinApp<TransportNativeHID>),
+    LedgerApp(FilecoinApp<TransportNativeHID>, BIP44Path),
     PrivateKey(PrivateKey),
     Lotus(Http, String),
 }
@@ -578,8 +581,8 @@ pub async fn sign_message(
     let signed_message: MessageTxAPI;
 
     match signature_method {
-        SignatureMethod::LedgerApp(ledger_app) => {
-            let signature = ledger_app.sign(&BIP44_PATH, &message_bytes).await.unwrap();
+        SignatureMethod::LedgerApp(ledger_app, bip_path) => {
+            let signature = ledger_app.sign(bip_path, &message_bytes).await.unwrap();
             let recovery_id = signature.v;
             let mut sig = signature.sig.to_vec();
             sig.push(recovery_id);
@@ -1253,7 +1256,7 @@ pub async fn get_filecoin_ledger(ledger_account: u32) -> FilecoinApp<TransportNa
 
     bip_path.account = ledger_account | 0x8000_0000;
 
-    let addr = app.address(&BIP44_PATH, false).await.unwrap();
+    let addr = app.address(&bip_path, false).await.unwrap();
     info!(
         "Connected to Filecoin Ledger on address: {:#?}",
         addr.addr_string
