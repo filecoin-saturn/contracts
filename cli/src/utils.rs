@@ -108,7 +108,7 @@ fn display_option<T: std::fmt::Debug>(v: &Option<T>) -> String {
         // truncate to 5 chars + ...
         match s.char_indices().nth(5) {
             None => s,
-            Some((idx, _)) => format!("{}...", s[..idx]),
+            Some((idx, _)) => format!("{}...", &s[..idx]),
         }
     } else {
         String::new()
