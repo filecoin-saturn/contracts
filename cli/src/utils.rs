@@ -116,7 +116,7 @@ fn display_option<T: std::fmt::Debug>(v: &Option<T>) -> String {
 }
 
 fn display_txns(v: &PendingTxns) -> String {
-    format!("{:?}", v.field)
+    format!("{:?}", &v.field[..10])
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize, Tabled)]
