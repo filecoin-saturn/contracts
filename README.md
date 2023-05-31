@@ -166,7 +166,7 @@ saturn-contracts --help
  The cli command examples given below assume you are using a local wallet.
 
 If you want to use a Ledger Wallet, you can do so but only with the Filecoin mainnet.
-1. Please replace the RPC API with `https://api.hyperspace.node.glif.io/rpc/v1`
+1. Please replace the RPC API with `https://api.calibration.node.glif.io/rpc/v1`
 2. Ensure your Ledger wallet is connected and unlocked and the `Ethereum` app is open on it.
 3. Ensure Ledger Live is open and the `Ethereum` app is open on it.
 4. Ensure that the Filecoin mainnet FIL address/EVM address that corresponds with your Ledger Ethereum address has funds in it.
@@ -227,8 +227,58 @@ A multisig is a filecoin actor (contract) where are a certain number of signator
 
 ```bash
 cd ./cli
-cargo run --bin saturn-contracts -- -U $RPC_URL --retries=10 propose-new-payout
+cargo run --bin saturn-contracts -- -U $RPC_URL --retries=10 propose-new-payout --actor-address $MULTISIG_ADDRESS  --receiver-address $CONTRACT_FIL_ADDRESS --payout-csv ./{path to payouts csv} --method ledger
 ```
+#### Inspecting a Multisig
+
+Inspecting a multisig returns the following information:
+- Balance of the multisig.
+- Signatories on the multisig.
+- Pending transactions.
+
+To inspect a multisig's state, run the following:
+
+```bash
+cd ./cli
+cargo run --bin saturn-contracts -- -U $RPC_URL --retries=10 multisig-inspect --actor-id $MSIG_ACTOR_ID
+```
+
+#### Approving a new payout
+To approve a pending payout transaction on a multisig, run the following:
+
+```bash
+cd ./cli
+cargo run --bin saturn-contracts -- -U $RPC_URL --retries=10 approve --actor-address $MULTISIG_ADDRESS  --transaction-id $TX_ID --method ledger
+```
+The `transaction-id` here refers to the transaction id of the message being approved.
+
+
+#### Cancel a multisig transaction
+To cancel a pending payout transaction on a multisig, run the following:
+
+```bash
+cd ./cli
+cargo run --bin saturn-contracts -- -U $RPC_URL --retries=10 cancel --actor-address $MULTISIG_ADDRESS  --transaction-id $TX_ID --method ledger
+```
+The `transaction-id` here refers to the transaction id of the message being cancelled.
+
+#### Approve all transactions on a multisig
+To cancel a pending payout transaction on a multisig, run the following:
+
+```bash
+cd ./cli
+cargo run --bin saturn-contracts -- -U $RPC_URL --retries=10 approve-all --actor-address $MULTISIG_ADDRESS --method ledger
+```
+
+#### Cancel all transactions on a multisig
+To cancel a pending payout transaction on a multisig, run the following:
+
+```bash
+cd ./cli
+cargo run --bin saturn-contracts -- -U $RPC_URL --retries=10 cancel-all --actor-address $MULTISIG_ADDRESS --method ledger
+```
+
+
 #### Payout Factory Deployment
 ```bash
 cd ./cli
