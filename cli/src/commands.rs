@@ -34,7 +34,7 @@ pub struct Cli {
     #[arg(short = 'S', long)]
     secret: Option<PathBuf>,
     /// RPC Url
-    #[arg(short = 'U', long)]
+    #[arg(short = 'U', long, default_value = "https://api.node.glif.io/rpc/v1")]
     rpc_url: String,
     // Num of retries when attempting to make a transaction.
     #[arg(long, default_value = "10")]
