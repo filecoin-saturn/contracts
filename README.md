@@ -212,7 +212,23 @@ saturn-contracts -- --rpc-url $RPC_URL claim --addr-to-claim $NODE_FIL_ADDRESS -
 	- "local" -> claim using a private key (recommended only for testing).
 
 
+### Multisig Payouts:
 
+A multisig is a filecoin actor (contract) where are a certain number of signatories are required to submit transactions. Each signer much approve a transaction before it is submitted on the blockchain. The Payout deployment process is governed by a multisig. This significantly enhances the security of operating the contract due to the following properties:
+- No single party or entity has absolute control over the payout factory contract.
+- In the case that one of the signatories is no longer available due ot any circumstance, the contract can still be operated and recovered.
+- In the case that one of the signatories is compromised by an attacker, it does not give the attacker control over the payout factory contract.
+- The signatories can vote to add/remove other new signatories.
+
+
+
+#### Proposing a new payout
+
+
+```bash
+cd ./cli
+cargo run --bin saturn-contracts -- -U $RPC_URL --retries=10 propose-new-payout
+```
 #### Payout Factory Deployment
 ```bash
 cd ./cli
