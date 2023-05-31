@@ -36,9 +36,12 @@ pub struct Cli {
     /// RPC Url
     #[arg(short = 'U', long, default_value = "https://api.node.glif.io/rpc/v1")]
     rpc_url: String,
-    // Num of retries when attempting to make a transaction.
+    /// Num of retries when attempting to make a transaction.
     #[arg(long, default_value = "10")]
     retries: usize,
+    /// Ledger account index in Bip44 Path.
+    #[arg(long, default_value = "0")]
+    ledger_account: u32,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -137,7 +140,9 @@ impl Cli {
             } => match method {
                 Some(option) => {
                     let (signing_method, signer_address) =
-                        get_signing_method_and_address(option).await.unwrap();
+                        get_signing_method_and_address(option, self.ledger_account.clone())
+                            .await
+                            .unwrap();
 
                     claim_earnings_filecoin_signing(
                         &provider.clone(),
@@ -213,7 +218,9 @@ impl Cli {
                 method,
             } => {
                 let (signing_method, signer_address) =
-                    get_signing_method_and_address(method).await.unwrap();
+                    get_signing_method_and_address(method, self.ledger_account.clone())
+                        .await
+                        .unwrap();
 
                 propose_payout(
                     actor_address,
@@ -234,7 +241,9 @@ impl Cli {
                 method,
             } => {
                 let (signing_method, signer_address) =
-                    get_signing_method_and_address(method).await.unwrap();
+                    get_signing_method_and_address(method, self.ledger_account.clone())
+                        .await
+                        .unwrap();
 
                 cancel_payout(
                     actor_address,
@@ -251,7 +260,9 @@ impl Cli {
             } => {
                 let tx = get_pending_transaction_multisig(&provider, actor_address).await?;
                 let (signing_method, signer_address) =
-                    get_signing_method_and_address(method).await.unwrap();
+                    get_signing_method_and_address(method, self.ledger_account.clone())
+                        .await
+                        .unwrap();
                 for transaction in tx.iter() {
                     cancel_payout(
                         actor_address,
@@ -269,7 +280,9 @@ impl Cli {
                 method,
             } => {
                 let (signing_method, signer_address) =
-                    get_signing_method_and_address(method).await.unwrap();
+                    get_signing_method_and_address(method, self.ledger_account.clone())
+                        .await
+                        .unwrap();
 
                 approve_payout(
                     &actor_address,
@@ -286,7 +299,9 @@ impl Cli {
             } => {
                 let tx = get_pending_transaction_multisig(&provider, actor_address).await?;
                 let (signing_method, signer_address) =
-                    get_signing_method_and_address(method).await.unwrap();
+                    get_signing_method_and_address(method, self.ledger_account.clone())
+                        .await
+                        .unwrap();
                 for transaction in tx.iter() {
                     approve_payout(
                         &actor_address,

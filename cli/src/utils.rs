@@ -104,14 +104,19 @@ fn display_vector<T: std::fmt::Debug>(v: &Vec<T>) -> String {
 }
 fn display_option<T: std::fmt::Debug>(v: &Option<T>) -> String {
     if let Some(x) = v {
-        format!("{:?}", x)
+        let s = format!("{:?}", x);
+        // truncate to 5 chars + ...
+        match s.char_indices().nth(5) {
+            None => s,
+            Some((idx, _)) => format!("{}...", &s[..idx]),
+        }
     } else {
         String::new()
     }
 }
 
 fn display_txns(v: &PendingTxns) -> String {
-    format!("{:?}", v.field)
+    format!("{:?}", &v.field[..10])
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize, Tabled)]
@@ -260,12 +265,13 @@ pub fn write_payout_csv(
 
 pub async fn get_signing_method_and_address(
     method: &SigningOptions,
+    ledger_account: u32,
 ) -> Result<(SignatureMethod, String), Box<dyn Error>> {
     let signing_method;
 
     match method {
         SigningOptions::Ledger => {
-            let filecoin_ledger_app = get_filecoin_ledger().await;
+            let filecoin_ledger_app = get_filecoin_ledger(ledger_account).await;
 
             let address = filecoin_ledger_app
                 .address(&BIP44_PATH, false)
@@ -1237,11 +1243,15 @@ pub async fn get_nonce(address: &str, provider: Provider<Http>) -> u64 {
     result.nonce
 }
 
-pub async fn get_filecoin_ledger() -> FilecoinApp<TransportNativeHID> {
+pub async fn get_filecoin_ledger(ledger_account: u32) -> FilecoinApp<TransportNativeHID> {
     let hid_api: Lazy<HidApi> = Lazy::new(|| HidApi::new().expect("Failed to create Hidapi"));
 
     let app =
         FilecoinApp::new(TransportNativeHID::new(&hid_api).expect("unable to create transport"));
+
+    let mut bip_path = BIP44_PATH;
+
+    bip_path.account = ledger_account | 0x8000_0000;
 
     let addr = app.address(&BIP44_PATH, false).await.unwrap();
     info!(
