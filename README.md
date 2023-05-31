@@ -132,32 +132,32 @@ forge bind  --select "(?:^|\W)PayoutFactoryNativeAddr|PaymentSplitterNativeAddr(
 ## Cli
 
 
-#### Installation 
+#### Installation
 
-First install 
+First install
 
-```bash 
+```bash
 curl https://sh.rustup.rs -sSf | sh
 
 ```
 
-Then install the cli by running: 
+Then install the cli by running:
 
 ```bash
 cargo install --path cli
 ```
 
-Alternatively you can install without cloning this repo: 
+Alternatively you can install without cloning this repo:
 
 ```bash
-cargo install --git https://github.com/filecoin-saturn/contracts cli 
+cargo install --git https://github.com/filecoin-saturn/contracts cli
 ```
 
 
-You can then get cli usage help using: 
+You can then get cli usage help using:
 
-```bash 
-saturn-contracts --help 
+```bash
+saturn-contracts --help
 ```
 
 ---
@@ -174,6 +174,44 @@ If you want to use a Ledger Wallet, you can do so but only with the Filecoin mai
 ---
 
 To use the bindings as scripts to deploy and interact with contracts first create a `./secrets/secret` file within `./cli` containing your mnemonic string (note this should only be used for testing purposes !).
+
+### Claiming Earnings using the CLI
+
+The CLI can be used to claim earnings for Saturn Node Operators. The earnings are claimed using a wallet. There following methods are supported for claiming your earnings:
+- Ledger Hardware Wallet (Both Ethereum and Filecoin Apps are supported to be used)
+- Lotus Node Wallets
+- Using Private Key (This is only recommended for testing usage)
+
+#### Inspecting your Earning Status
+Node operators can inspect their earnings using the `inspect-earnings` command.
+
+
+To inspect your earnings, run:
+```bash
+saturn-contracts -- --rpc-url $RPC_URL inspect-earnings --address $NODE_FIL_ADDRESS --factory-address $CONTRACT_FIL_ADDRESS
+```
+- `$NODE_FIL_ADDRESS` represents the Filecoin address of the Saturn Node.
+- `$CONTRACT_FIL_ADDRESS` is the Filecoin Address of the Payouts Factory Contract
+
+
+#### Claiming your Earnings
+Node operators can inspect their earnings using the `inspect-earnings` command.
+
+
+To claim your earnings, run:
+```bash
+saturn-contracts -- --rpc-url $RPC_URL claim --addr-to-claim $NODE_FIL_ADDRESS --factory-addr $CONTRACT_FIL_ADDRESS --method "ledger"
+```
+- `$NODE_FIL_ADDRESS` represents the Filecoin address of the Saturn Node.
+- `$CONTRACT_FIL_ADDRESS` is the Filecoin Address of the Payouts Factory Contract
+
+
+- `--method` refers to the method you will be claiming with and has three options:
+	- "ledger" -> claim with your ledger wallet.
+	- "lotus" -> claim with your lotus node.
+	- "local" -> claim using a private key (recommended only for testing).
+
+
 
 #### Payout Factory Deployment
 ```bash

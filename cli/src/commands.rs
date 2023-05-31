@@ -371,9 +371,9 @@ pub enum Commands {
         #[arg(short = 'A', long)]
         addr_to_claim: String,
         // Index from which to start claiming
-        #[arg(short = 'O', long, default_value = "1")]
+        #[arg(short = 'O', long, default_value = "0")]
         offset: usize,
-        #[arg(short = 'M', long)]
+        #[arg(short = 'M', long, required = false)]
         method: Option<SigningOptions>,
     },
     /// Fund a factory contract
