@@ -132,32 +132,32 @@ forge bind  --select "(?:^|\W)PayoutFactoryNativeAddr|PaymentSplitterNativeAddr(
 ## Cli
 
 
-#### Installation 
+#### Installation
 
-First install 
+First install
 
-```bash 
+```bash
 curl https://sh.rustup.rs -sSf | sh
 
 ```
 
-Then install the cli by running: 
+Then install the cli by running:
 
 ```bash
 cargo install --path cli
 ```
 
-Alternatively you can install without cloning this repo: 
+Alternatively you can install without cloning this repo:
 
 ```bash
-cargo install --git https://github.com/filecoin-saturn/contracts cli 
+cargo install --git https://github.com/filecoin-saturn/contracts cli
 ```
 
 
-You can then get cli usage help using: 
+You can then get cli usage help using:
 
-```bash 
-saturn-contracts --help 
+```bash
+saturn-contracts --help
 ```
 
 ---
@@ -166,7 +166,7 @@ saturn-contracts --help
  The cli command examples given below assume you are using a local wallet.
 
 If you want to use a Ledger Wallet, you can do so but only with the Filecoin mainnet.
-1. Please replace the RPC API with `https://api.hyperspace.node.glif.io/rpc/v1`
+1. Please replace the RPC API with `https://api.calibration.node.glif.io/rpc/v1`
 2. Ensure your Ledger wallet is connected and unlocked and the `Ethereum` app is open on it.
 3. Ensure Ledger Live is open and the `Ethereum` app is open on it.
 4. Ensure that the Filecoin mainnet FIL address/EVM address that corresponds with your Ledger Ethereum address has funds in it.
@@ -174,6 +174,110 @@ If you want to use a Ledger Wallet, you can do so but only with the Filecoin mai
 ---
 
 To use the bindings as scripts to deploy and interact with contracts first create a `./secrets/secret` file within `./cli` containing your mnemonic string (note this should only be used for testing purposes !).
+
+### Claiming Earnings using the CLI
+
+The CLI can be used to claim earnings for Saturn Node Operators. The earnings are claimed using a wallet. There following methods are supported for claiming your earnings:
+- Ledger Hardware Wallet (Both Ethereum and Filecoin Apps are supported to be used)
+- Lotus Node Wallets
+- Using Private Key (This is only recommended for testing usage)
+
+#### Inspecting your Earning Status
+Node operators can inspect their earnings using the `inspect-earnings` command.
+
+
+To inspect your earnings, run:
+```bash
+saturn-contracts -- --rpc-url $RPC_URL inspect-earnings --address $NODE_FIL_ADDRESS --factory-address $CONTRACT_FIL_ADDRESS
+```
+- `$NODE_FIL_ADDRESS` represents the Filecoin address of the Saturn Node.
+- `$CONTRACT_FIL_ADDRESS` is the Filecoin Address of the Payouts Factory Contract
+
+
+#### Claiming your Earnings
+Node operators can inspect their earnings using the `inspect-earnings` command.
+
+
+To claim your earnings, run:
+```bash
+saturn-contracts -- --rpc-url $RPC_URL claim --addr-to-claim $NODE_FIL_ADDRESS --factory-addr $CONTRACT_FIL_ADDRESS --method "ledger"
+```
+- `$NODE_FIL_ADDRESS` represents the Filecoin address of the Saturn Node.
+- `$CONTRACT_FIL_ADDRESS` is the Filecoin Address of the Payouts Factory Contract
+
+
+- `--method` refers to the method you will be claiming with and has three options:
+	- "ledger" -> claim with your ledger wallet.
+	- "lotus" -> claim with your lotus node.
+	- "local" -> claim using a private key (recommended only for testing).
+
+
+### Multisig Payouts:
+
+A multisig is a filecoin actor (contract) where are a certain number of signatories are required to submit transactions. Each signer much approve a transaction before it is submitted on the blockchain. The Payout deployment process is governed by a multisig. This significantly enhances the security of operating the contract due to the following properties:
+- No single party or entity has absolute control over the payout factory contract.
+- In the case that one of the signatories is no longer available due ot any circumstance, the contract can still be operated and recovered.
+- In the case that one of the signatories is compromised by an attacker, it does not give the attacker control over the payout factory contract.
+- The signatories can vote to add/remove other new signatories.
+
+
+
+#### Proposing a new payout
+
+
+```bash
+cd ./cli
+cargo run --bin saturn-contracts -- -U $RPC_URL --retries=10 propose-new-payout --actor-address $MULTISIG_ADDRESS  --receiver-address $CONTRACT_FIL_ADDRESS --payout-csv ./{path to payouts csv} --method ledger
+```
+#### Inspecting a Multisig
+
+Inspecting a multisig returns the following information:
+- Balance of the multisig.
+- Signatories on the multisig.
+- Pending transactions.
+
+To inspect a multisig's state, run the following:
+
+```bash
+cd ./cli
+cargo run --bin saturn-contracts -- -U $RPC_URL --retries=10 multisig-inspect --actor-id $MSIG_ACTOR_ID
+```
+
+#### Approving a new payout
+To approve a pending payout transaction on a multisig, run the following:
+
+```bash
+cd ./cli
+cargo run --bin saturn-contracts -- -U $RPC_URL --retries=10 approve --actor-address $MULTISIG_ADDRESS  --transaction-id $TX_ID --method ledger
+```
+The `transaction-id` here refers to the transaction id of the message being approved.
+
+
+#### Cancel a multisig transaction
+To cancel a pending payout transaction on a multisig, run the following:
+
+```bash
+cd ./cli
+cargo run --bin saturn-contracts -- -U $RPC_URL --retries=10 cancel --actor-address $MULTISIG_ADDRESS  --transaction-id $TX_ID --method ledger
+```
+The `transaction-id` here refers to the transaction id of the message being cancelled.
+
+#### Approve all transactions on a multisig
+To cancel a pending payout transaction on a multisig, run the following:
+
+```bash
+cd ./cli
+cargo run --bin saturn-contracts -- -U $RPC_URL --retries=10 approve-all --actor-address $MULTISIG_ADDRESS --method ledger
+```
+
+#### Cancel all transactions on a multisig
+To cancel a pending payout transaction on a multisig, run the following:
+
+```bash
+cd ./cli
+cargo run --bin saturn-contracts -- -U $RPC_URL --retries=10 cancel-all --actor-address $MULTISIG_ADDRESS --method ledger
+```
+
 
 #### Payout Factory Deployment
 ```bash

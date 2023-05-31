@@ -1253,7 +1253,7 @@ pub async fn get_filecoin_ledger(ledger_account: u32) -> FilecoinApp<TransportNa
 
     bip_path.account = ledger_account | 0x8000_0000;
 
-    let addr = app.address(&BIP44_PATH, false).await.unwrap();
+    let addr = app.address(&bip_path, false).await.unwrap();
     info!(
         "Connected to Filecoin Ledger on address: {:#?}",
         addr.addr_string

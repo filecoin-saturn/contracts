@@ -34,7 +34,7 @@ pub struct Cli {
     #[arg(short = 'S', long)]
     secret: Option<PathBuf>,
     /// RPC Url
-    #[arg(short = 'U', long)]
+    #[arg(short = 'U', long, default_value = "https://api.node.glif.io/rpc/v1")]
     rpc_url: String,
     /// Num of retries when attempting to make a transaction.
     #[arg(long, default_value = "10")]
@@ -386,9 +386,9 @@ pub enum Commands {
         #[arg(short = 'A', long)]
         addr_to_claim: String,
         // Index from which to start claiming
-        #[arg(short = 'O', long, default_value = "1")]
+        #[arg(short = 'O', long, default_value = "0")]
         offset: usize,
-        #[arg(short = 'M', long)]
+        #[arg(short = 'M', long, required = false)]
         method: Option<SigningOptions>,
     },
     /// Fund a factory contract
