@@ -104,14 +104,19 @@ fn display_vector<T: std::fmt::Debug>(v: &Vec<T>) -> String {
 }
 fn display_option<T: std::fmt::Debug>(v: &Option<T>) -> String {
     if let Some(x) = v {
-        format!("{:?}", x)
+        let s = format!("{:?}", x);
+        // truncate to 5 chars + ...
+        match s.char_indices().nth(5) {
+            None => s,
+            Some((idx, _)) => format!("{}...", &s[..idx]),
+        }
     } else {
         String::new()
     }
 }
 
 fn display_txns(v: &PendingTxns) -> String {
-    format!("{:?}", v.field)
+    format!("{:?}", &v.field[..10])
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize, Tabled)]
