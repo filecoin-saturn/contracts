@@ -1273,18 +1273,29 @@ pub fn random_filecoin_address(testnet: bool) -> Result<String, Box<dyn Error>> 
     Ok(addr.to_string())
 }
 
-/// Formats an ethers U256 type to an f64 with 5 significant digits.
-fn format_u256(value: U256) -> f64 {
+/// Formats an ethers U256 type to an f64 to a precision of 5 significant digits.
+///
+/// Example:
+///
+/// ```
+/// use ethers::types::{U256};
+/// use cli::utils::format_u256;
+/// let ethers_value = U256::from(35000000000000000_u128);
+/// # println!("U256 Value: {:?}", ethers_value);
+/// let converted_f64_value = format_u256(ethers_value);
+/// # println!("Converted f64: {:?}", converted_f64_value);
+/// ```
+pub fn format_u256(value: U256) -> f64 {
     let precision_factor = 10_f64.powf(5.0);
-
     let divider = &*ATTO_FIL / precision_factor;
     let value = value / U256::from(divider.to_u128().unwrap());
-
     value.as_u64().to_f64().unwrap() / precision_factor
 }
 
 #[cfg(test)]
 mod tests {
+    use super::{format_u256, ATTO_FIL};
+    use ethabi::ethereum_types::U256;
 
     #[test]
     fn test_random_filecoin_address() {
@@ -1307,5 +1318,26 @@ mod tests {
             let payout_str = format!("{},{}\n", random_payee, amount);
             global_payout = format!("{}{}", global_payout, payout_str);
         }
+    }
+
+    #[test]
+    fn test_format_u256() {
+        // Generate potential earnings ranging from 0.0001 to 10,000 FIL.
+        let test_values: Vec<f64> = (-4..5).map(|exp| 10_f64.powf(exp as f64)).collect();
+
+        // Convert those earnings to U256 values as they will be returned from the contract.
+        let u256_test_values: Vec<U256> = test_values
+            .iter()
+            .map(|value| U256::from((value * &*ATTO_FIL) as u128))
+            .collect();
+
+        // Convert back the values to f64
+        let formatted_u256_values: Vec<f64> = u256_test_values
+            .iter()
+            .map(|value| format_u256(*value))
+            .collect();
+
+        println!("Formatted Values: {:?}", formatted_u256_values);
+        assert_eq!(test_values, formatted_u256_values);
     }
 }
