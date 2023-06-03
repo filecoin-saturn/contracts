@@ -670,10 +670,10 @@ pub async fn inspect_earnings(provider: &Provider<Http>, address: &str, factory_
     };
 
     let releasable = contract.releasable(fil_addr.clone()).call().await.unwrap();
-    let releasable = releasable.as_u64().to_f64().unwrap() / &*ATTO_FIL;
+    let releasable = format_u256(releasable);
 
     let released = contract.released(fil_addr.clone()).await.unwrap();
-    let released = released.as_u64().to_f64().unwrap() / &*ATTO_FIL;
+    let released = format_u256(released);
 
     let shares = releasable + released;
 
@@ -682,8 +682,6 @@ pub async fn inspect_earnings(provider: &Provider<Http>, address: &str, factory_
         releasable,
         released,
     };
-
-    info!("{:?}", payout_info);
 
     let mut table = Table::new(vec![payout_info.clone()].iter());
     table.with(tabled::settings::Style::modern());
@@ -1273,6 +1271,16 @@ pub fn random_filecoin_address(testnet: bool) -> Result<String, Box<dyn Error>> 
         set_current_network(fvm_shared::address::Network::Testnet);
     }
     Ok(addr.to_string())
+}
+
+/// Formats an ethers U256 type to an f64 with 5 significant digits.
+fn format_u256(value: U256) -> f64 {
+    let precision_factor = 10_f64.powf(5.0);
+
+    let divider = &*ATTO_FIL / precision_factor;
+    let value = value / U256::from(divider.to_u128().unwrap());
+
+    value.as_u64().to_f64().unwrap() / precision_factor
 }
 
 #[cfg(test)]
