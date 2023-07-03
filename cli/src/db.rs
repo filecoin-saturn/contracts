@@ -83,7 +83,7 @@ fn format_payout_res(res: Vec<Row>) -> Result<PayoutRecords, Error> {
 
 /// Retrieves and aggregates payment information from the `payment_aggregation`
 /// table.
-pub async fn get_payment_records(date: &str, cassini_only: bool) -> Result<PayoutRecords, Error> {
+pub async fn get_payment_records(date: &str) -> Result<PayoutRecords, Error> {
     let client = connect().await.unwrap();
 
     let date = format_date(date).unwrap();
@@ -97,15 +97,14 @@ pub async fn get_payment_records(date: &str, cassini_only: bool) -> Result<Payou
         INNER JOIN
             nodes on payment_aggregation.node_id = nodes.id
             AND core = false
-            AND cassini = $1
             AND banned_at is NULL
         WHERE
             date_trunc('month',time_stamp)::date =
-                date_trunc('month', $2::TIMESTAMP WITH TIME ZONE)::date
+                date_trunc('month', $1::TIMESTAMP WITH TIME ZONE)::date
         GROUP BY fil_wallet_address
         ORDER BY sum(fil_earned) desc
     ",
-            &[&cassini_only, &date],
+            &[&date],
         )
         .await
         .unwrap();
@@ -113,44 +112,4 @@ pub async fn get_payment_records(date: &str, cassini_only: bool) -> Result<Payou
     let payout = format_payout_res(res).unwrap();
 
     Ok(payout)
-}
-
-/// Generates the final monthly payout for each month.
-///
-/// Currently includes a final row with the factory address and total for cassini members.
-pub async fn get_payment_records_for_finance(
-    date: &str,
-    factory_address: &str,
-) -> Result<PayoutRecords, Error> {
-    let client = connect().await.unwrap();
-    let mut node_payouts = get_payment_records(date, true).await.unwrap();
-    let date = format_date(date).unwrap();
-
-    let res = client
-        .query(
-            "
-            SELECT
-                sum(fil_earned)
-            FROM  payment_aggregation
-            INNER JOIN
-                nodes on payment_aggregation.node_id = nodes.id
-                AND core = false
-                AND cassini = true
-                AND banned_at is NULL
-            WHERE
-                date_trunc('month',time_stamp)::date =
-                    date_trunc('month', $1::TIMESTAMP WITH TIME ZONE)::date
-            ",
-            &[&date],
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(res.len(), 1);
-    let cassini_payout: Decimal = res[0].get(0);
-
-    node_payouts.payees.push(factory_address.to_string());
-    node_payouts.shares.push(cassini_payout.to_f64().unwrap());
-
-    Ok(node_payouts)
 }

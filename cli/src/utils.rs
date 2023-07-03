@@ -145,7 +145,7 @@ pub struct MultiSigActor {
     pub state: State,
 }
 
-use crate::db::{get_payment_records, get_payment_records_for_finance, PayoutRecords};
+use crate::db::{get_payment_records, PayoutRecords};
 
 pub static ATTO_FIL: Lazy<f64> = Lazy::new(|| 10_f64.powf(18.0));
 
@@ -845,9 +845,7 @@ pub async fn propose_payout(
     signature_method: SignatureMethod,
     signer_address: &str,
 ) -> Result<(), Box<dyn Error>> {
-    let (payees, shares) = get_payout_data(db_deploy, &payout_csv, date, receiver_address)
-        .await
-        .unwrap();
+    let (payees, shares) = get_payout_data(db_deploy, &payout_csv, date).await.unwrap();
 
     let total_sum = shares.clone().iter().fold(0_f64, |acc, x| acc + x);
 
@@ -980,9 +978,7 @@ pub async fn new_payout<S: Middleware + 'static>(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let addr = Address::from_str(factory_addr)?;
 
-    let (payees, shares) = get_payout_data(db_deploy, &payout_csv, date, factory_addr)
-        .await
-        .unwrap();
+    let (payees, shares) = get_payout_data(db_deploy, &payout_csv, date).await.unwrap();
 
     let total_sum = shares.clone().iter().fold(0_f64, |acc, x| acc + x);
 
@@ -1029,12 +1025,9 @@ async fn get_payout_data(
     db_deploy: &bool,
     csv_path: &Option<PathBuf>,
     date: &str,
-    factory_addr: &str,
 ) -> Result<(Vec<String>, Vec<f64>), Box<dyn Error>> {
     if *db_deploy {
-        let db_payout_records = get_payment_records_for_finance(date, factory_addr)
-            .await
-            .unwrap();
+        let db_payout_records = get_payment_records(date).await.unwrap();
         return Ok((db_payout_records.payees, db_payout_records.shares));
     } else {
         let (payees, shares) = match csv_path {
@@ -1166,29 +1159,17 @@ pub async fn generate_monthly_payout(date: &str, factory_address: &str) {
         panic!("User rejected current date");
     }
 
-    let PayoutRecords { payees, shares } = get_payment_records_for_finance(date, factory_address)
-        .await
-        .unwrap();
+    let PayoutRecords { payees, shares } = get_payment_records(date).await.unwrap();
 
-    let csv_title = format!("Saturn-Finance-Payouts-{}.csv", date);
+    let csv_title = format!("Saturn-FVM-Payouts-{}.csv", date);
     let path = PathBuf::from_str(csv_title.as_str()).unwrap();
     write_payout_csv(&path, &payees, &shares).unwrap();
 
-    let PayoutRecords { payees, shares } = get_payment_records(date, false).await.unwrap();
-
+    let csv_title = format!("Saturn-Contract-Fund-{}.csv", date);
+    let path = PathBuf::from_str(csv_title.as_str()).unwrap();
     let payout_sum: f64 = shares.iter().sum();
+    write_payout_csv(&path, &vec![factory_address.to_string()], &vec![payout_sum]).unwrap();
     info!("Sum from payouts {:#?}", payout_sum);
-    let csv_title = format!("Saturn-Global-Payouts-{}.csv", date);
-    let path = PathBuf::from_str(csv_title.as_str()).unwrap();
-    write_payout_csv(&path, &payees, &shares).unwrap();
-
-    let PayoutRecords { payees, shares } = get_payment_records(date, true).await.unwrap();
-
-    let payout_sum: f64 = shares.iter().sum();
-    info!("Sum from cassini only payouts {:#?}", payout_sum);
-    let csv_title = format!("Saturn-Cassini-Payouts-{}.csv", date);
-    let path = PathBuf::from_str(csv_title.as_str()).unwrap();
-    write_payout_csv(&path, &payees, &shares).unwrap();
 }
 
 #[derive(Debug)]
