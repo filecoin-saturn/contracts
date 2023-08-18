@@ -149,7 +149,7 @@ use crate::db::{get_payment_records, PayoutRecords};
 
 pub static ATTO_FIL: Lazy<f64> = Lazy::new(|| 10_f64.powf(18.0));
 
-pub const MAX_PAYEES_PER_PAYOUT: usize = 700;
+pub const MAX_PAYEES_PER_PAYOUT: usize = 305;
 
 // MaxFee is set to zero when using MpoolPush
 const MAX_FEE: &str = "0";
@@ -456,6 +456,135 @@ pub async fn cancel_payout(
         params: MessageParams::TxnIDParams(params).serialize()?,
     };
 
+    let signed_message: MessageTxAPI = sign_message(provider, signing_method, &mut message).await?;
+
+    push_mpool_message(provider, signed_message).await?;
+    Ok(())
+}
+
+pub async fn get_unreleased_payout_contracts(
+    factory_address: &str,
+    release_address: &str,
+    rpc_url: &str,
+    provider: &Provider<Http>,
+) -> Result<Vec<U256>, Box<dyn std::error::Error>> {
+    let factory_eth_address = filecoin_to_eth_address(factory_address, rpc_url)
+        .await
+        .unwrap();
+    let contract_addr = Address::from_str(factory_eth_address.as_str()).unwrap();
+
+    let client = Arc::new(provider.clone());
+    let factory = PayoutFactory::new(contract_addr, client);
+
+    let release_addr = FilAddress {
+        data: check_address_string(release_address).unwrap().bytes.into(),
+    };
+
+    let contract_call_result = factory.releasable_per_contract(release_addr).call().await;
+
+    let res = match contract_call_result {
+        Ok(result) => {
+            let contracts = result.0;
+            let releasable_payouts = result.1;
+            assert!(contracts.len() == releasable_payouts.len());
+
+            releasable_payouts
+                .iter()
+                .enumerate()
+                .filter(|&(_, &value)| value != 0.into())
+                .map(|(index, _)| index.into())
+                .collect()
+        }
+        Err(error) => {
+            panic!(
+                "Error extracting payout info for {}: {}",
+                release_address, error
+            )
+        }
+    };
+
+    Ok(res)
+}
+
+pub async fn release_selected_payouts<S: ::ethers::providers::Middleware + 'static>(
+    client: Arc<S>,
+    retries: usize,
+    gas_price: U256,
+    factory_addr: &str,
+    addr_to_claim: &str,
+    selected_contract_indices: Vec<U256>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let addr = Address::from_str(factory_addr)?;
+    let factory = PayoutFactory::new(addr, client.clone());
+    let addr_to_claim = check_address_string(addr_to_claim)?;
+    let claim_addr = FilAddress {
+        data: addr_to_claim.bytes.into(),
+    };
+    let mut claim_tx = factory.release_select(claim_addr, selected_contract_indices);
+    let tx = claim_tx.tx.clone();
+    set_tx_gas(
+        &mut claim_tx.tx,
+        client.estimate_gas(&tx, None).await?,
+        gas_price,
+    );
+
+    info!("estimated claim gas cost {:#?}", claim_tx.tx.gas().unwrap());
+
+    send_tx(&claim_tx.tx, client, retries).await?;
+    Ok(())
+}
+
+pub async fn release_selected_payouts_filecoin_signing(
+    provider: &Provider<Http>,
+    factory_addr: &str,
+    release_address: &str,
+    selected_contract_indices: Vec<U256>,
+    signing_method: &SignatureMethod,
+    signing_address: &str,
+    rpc_url: &str,
+) -> Result<(), Box<dyn Error>> {
+    let factory_eth_addr = filecoin_to_eth_address(factory_addr, rpc_url)
+        .await
+        .unwrap();
+
+    let addr = Address::from_str(factory_eth_addr.as_str()).unwrap();
+    let release_addr = FilAddress {
+        data: check_address_string(release_address).unwrap().bytes.into(),
+    };
+
+    let client = Arc::new(provider.clone());
+    let factory = PayoutFactory::new(addr, client);
+
+    let call_bytes = factory
+        .release_select(release_addr, selected_contract_indices)
+        .calldata()
+        .unwrap()
+        .to_vec();
+
+    let num_bytes = call_bytes.len().to_be_bytes();
+    let num_bytes = num_bytes
+        .iter()
+        .filter(|x| **x != 0)
+        .map(|x| x.clone())
+        .collect::<Vec<u8>>();
+    let mut params = hex::decode(PARAMS_CBOR_HEADER[num_bytes.len() - 1])?;
+    params.extend(num_bytes);
+    params.extend(call_bytes.clone());
+
+    let nonce = get_nonce(&signing_address, provider.clone()).await;
+
+    let mut message = Message {
+        version: 0,
+        to: FilecoinAddress::from_str(&factory_addr)?,
+        from: FilecoinAddress::from_str(&signing_address)?,
+        sequence: nonce,
+        value: TokenAmount::from_atto(BigInt::from_str("0")?),
+        gas_limit: 0,
+        gas_fee_cap: TokenAmount::from_atto(BigInt::from_str("0")?),
+        gas_premium: TokenAmount::from_atto(BigInt::from_str("0")?),
+        method_num: 3844450837, // InvokeContract is method no 3844450837
+        params: RawBytes::new(params),
+    };
     let signed_message: MessageTxAPI = sign_message(provider, signing_method, &mut message).await?;
 
     push_mpool_message(provider, signed_message).await?;

@@ -282,11 +282,11 @@ cargo run --bin saturn-contracts -- -U $RPC_URL --retries=10 cancel-all --actor-
 #### Payout Factory Deployment
 ```bash
 cd ./cli
-cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 deploy
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.calibration.node.glif.io/rpc/v1 --retries=10 deploy
 
 ```
 
-> **Note:** The `--retries` parameter sets a number of times to poll a pending transaction before considering it as having failed. Because of the differences in block times between Filecoin / Hyperspace and Ethereum, `ethers-rs` can sometimes timeout prematurely _before_ a transaction has truly failed or succeeded (`ethers-rs` has been built with Ethereum in mind). `--retries` has a default value of 10, which empirically we have found to result in successful transactions.
+> **Note:** The `--retries` parameter sets a number of times to poll a pending transaction before considering it as having failed. Because of the differences in block times between Filecoin / calibration and Ethereum, `ethers-rs` can sometimes timeout prematurely _before_ a transaction has truly failed or succeeded (`ethers-rs` has been built with Ethereum in mind). `--retries` has a default value of 10, which empirically we have found to result in successful transactions.
 
 
 #### Payment Splitter Deployments
@@ -295,7 +295,7 @@ Make sure your deployed factory has sufficient funds for the subsequent payouts.
 
 ```bash
 cd ./cli
-cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 fund -F $FACTORY_ADDRESS -A $PAYOUT_AMOUNT
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.calibration.node.glif.io/rpc/v1 --retries=10 fund -F $FACTORY_ADDRESS -A $PAYOUT_AMOUNT
 ```
 
 ##### Using a CSV file:
@@ -314,7 +314,7 @@ t410f4bmm756u5kft2czgqll4oybvtch3jj5v64yjeya,1
 Now run:
 ```bash
 cd ./cli
-cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 new-payout -F $FACTORY_ADDRESS -P ./secrets/payouts.csv
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.calibration.node.glif.io/rpc/v1 --retries=10 new-payout -F $FACTORY_ADDRESS -P ./secrets/payouts.csv
 ```
 
 ##### Using a Database:
@@ -333,20 +333,20 @@ To deploy a new `PaymentSplitter` from a deployed `PayoutFactory` contract using
 Run:
 ```bash
 cd ./cli
-cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 new-payout -F $FACTORY_ADDRESS --db-deploy
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.calibration.node.glif.io/rpc/v1 --retries=10 new-payout -F $FACTORY_ADDRESS --db-deploy
 ```
 #### Claiming Earnings
 You can then claim funds for a specific payee using the cli:
 ```bash
 cd ./cli
-cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 claim -F $FACTORY_ADDRESS -A $CLAIM_ADDRESS
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.calibration.node.glif.io/rpc/v1 --retries=10 claim -F $FACTORY_ADDRESS -A $CLAIM_ADDRESS
 ```
 #### Write PayoutFactory Abi
 To write the `PayoutFactory` abi to a JSON file, you can use the `write-abi` command as such:
 
 ```bash
 cd ./cli
-cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 write-abi -P $ABI_PATH
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.calibration.node.glif.io/rpc/v1 --retries=10 write-abi -P $ABI_PATH
 ```
 
 #### Write Payout CSVs:
@@ -360,7 +360,7 @@ To run the command:
 
 ```bash
 cd ./cli
-cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 generate-monthly-payout -D 2023-01 -F $FILECOIN_FACTORY_ADRESS
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.calibration.node.glif.io/rpc/v1 --retries=10 generate-monthly-payout -D 2023-01 -F $FILECOIN_FACTORY_ADRESS
 ```
 ### Hardhat Integration
 

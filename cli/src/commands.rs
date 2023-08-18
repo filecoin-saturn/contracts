@@ -17,10 +17,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::utils::{
-    approve_payout, cancel_payout, claim_earnings, claim_earnings_filecoin_signing,
-    deploy_factory_contract, fund_factory_contract, generate_monthly_payout,
-    get_pending_transaction_multisig, get_signing_method_and_address, grant_admin,
-    inspect_earnings, inspect_multisig, new_payout, propose_payout, SigningOptions,
+    approve_payout, cancel_payout, deploy_factory_contract, fund_factory_contract,
+    generate_monthly_payout, get_pending_transaction_multisig, get_signing_method_and_address,
+    get_unreleased_payout_contracts, grant_admin, inspect_earnings, inspect_multisig, new_payout,
+    propose_payout, release_selected_payouts, release_selected_payouts_filecoin_signing,
+    SigningOptions,
 };
 
 #[allow(missing_docs)]
@@ -135,55 +136,65 @@ impl Cli {
             Commands::Claim {
                 factory_addr,
                 addr_to_claim,
-                offset,
                 method,
-            } => match method {
-                Some(option) => {
-                    let (signing_method, signer_address) =
-                        get_signing_method_and_address(option, self.ledger_account.clone())
-                            .await
-                            .unwrap();
+            } => {
+                let releasable_contract_indices = get_unreleased_payout_contracts(
+                    &factory_addr,
+                    &addr_to_claim,
+                    &self.rpc_url,
+                    &provider.clone(),
+                )
+                .await
+                .unwrap();
+                match method {
+                    Some(option) => {
+                        let (signing_method, signer_address) =
+                            get_signing_method_and_address(option, self.ledger_account.clone())
+                                .await
+                                .unwrap();
 
-                    claim_earnings_filecoin_signing(
-                        &provider.clone(),
-                        factory_addr,
-                        addr_to_claim,
-                        &signing_method,
-                        &signer_address,
-                        &self.rpc_url,
-                    )
-                    .await?
-                }
-                None => {
-                    let factory_eth_addr =
-                        filecoin_to_eth_address(&factory_addr, &self.rpc_url).await?;
-                    if self.secret.is_some() {
-                        let client = get_wallet(self.secret.unwrap(), provider).await?;
-                        claim_earnings(
-                            client.clone(),
-                            self.retries,
-                            gas_price,
-                            ethers::types::U256::from(*offset),
-                            &factory_eth_addr,
-                            addr_to_claim,
-                        )
-                        .await?;
-                    } else {
-                        let client =
-                            get_ledger_signing_provider(provider, chain_id.as_u64()).await?;
-                        let client = Arc::new(client);
-                        claim_earnings(
-                            client.clone(),
-                            self.retries,
-                            gas_price,
-                            ethers::types::U256::from(*offset),
+                        release_selected_payouts_filecoin_signing(
+                            &provider.clone(),
                             factory_addr,
                             addr_to_claim,
+                            releasable_contract_indices.clone(),
+                            &signing_method,
+                            &signer_address,
+                            &self.rpc_url,
                         )
-                        .await?;
+                        .await?
+                    }
+                    None => {
+                        let factory_eth_addr =
+                            filecoin_to_eth_address(&factory_addr, &self.rpc_url).await?;
+                        if self.secret.is_some() {
+                            let client = get_wallet(self.secret.unwrap(), provider).await?;
+                            release_selected_payouts(
+                                client.clone(),
+                                self.retries,
+                                gas_price,
+                                &factory_eth_addr,
+                                addr_to_claim,
+                                releasable_contract_indices.clone(),
+                            )
+                            .await?;
+                        } else {
+                            let client =
+                                get_ledger_signing_provider(provider, chain_id.as_u64()).await?;
+                            let client = Arc::new(client);
+                            release_selected_payouts(
+                                client.clone(),
+                                self.retries,
+                                gas_price,
+                                &factory_eth_addr,
+                                addr_to_claim,
+                                releasable_contract_indices.clone(),
+                            )
+                            .await?;
+                        }
                     }
                 }
-            },
+            }
             Commands::Fund {
                 factory_addr,
                 amount,
@@ -385,9 +396,6 @@ pub enum Commands {
         // Address to claim for
         #[arg(short = 'A', long)]
         addr_to_claim: String,
-        // Index from which to start claiming
-        #[arg(short = 'O', long, default_value = "0")]
-        offset: usize,
         #[arg(short = 'M', long, required = false)]
         method: Option<SigningOptions>,
     },
