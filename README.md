@@ -166,7 +166,7 @@ saturn-contracts --help
  The cli command examples given below assume you are using a local wallet.
 
 If you want to use a Ledger Wallet, you can do so but only with the Filecoin mainnet.
-1. Please replace the RPC API with `https://api.hyperspace.node.glif.io/rpc/v1`
+1. Please replace the RPC API with `https://api.calibration.node.glif.io/rpc/v1`
 2. Ensure your Ledger wallet is connected and unlocked and the `Ethereum` app is open on it.
 3. Ensure Ledger Live is open and the `Ethereum` app is open on it.
 4. Ensure that the Filecoin mainnet FIL address/EVM address that corresponds with your Ledger Ethereum address has funds in it.
@@ -286,7 +286,7 @@ cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace
 
 ```
 
-> **Note:** The `--retries` parameter sets a number of times to poll a pending transaction before considering it as having failed. Because of the differences in block times between Filecoin / hyperspace and Ethereum, `ethers-rs` can sometimes timeout prematurely _before_ a transaction has truly failed or succeeded (`ethers-rs` has been built with Ethereum in mind). `--retries` has a default value of 10, which empirically we have found to result in successful transactions.
+> **Note:** The `--retries` parameter sets a number of times to poll a pending transaction before considering it as having failed. Because of the differences in block times between Filecoin / Hyperspace and Ethereum, `ethers-rs` can sometimes timeout prematurely _before_ a transaction has truly failed or succeeded (`ethers-rs` has been built with Ethereum in mind). `--retries` has a default value of 10, which empirically we have found to result in successful transactions.
 
 
 #### Payment Splitter Deployments
