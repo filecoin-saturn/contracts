@@ -282,7 +282,7 @@ cargo run --bin saturn-contracts -- -U $RPC_URL --retries=10 cancel-all --actor-
 #### Payout Factory Deployment
 ```bash
 cd ./cli
-cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 deploy
+cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.calibration.node.glif.io/rpc/v1 --retries=10 deploy
 
 ```
 
