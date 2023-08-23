@@ -98,6 +98,7 @@ pub async fn get_payment_records(date: &str) -> Result<PayoutRecords, Error> {
             nodes on payment_aggregation.node_id = nodes.id
             AND core = false
             AND banned_at is NULL
+            AND status = 'paid'
         WHERE
             date_trunc('month',time_stamp)::date =
                 date_trunc('month', $1::TIMESTAMP WITH TIME ZONE)::date
