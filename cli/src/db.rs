@@ -93,9 +93,9 @@ pub async fn get_payment_records(date: &str) -> Result<PayoutRecords, Error> {
             "
         SELECT
             fil_wallet_address, sum(fil_earned)
-        FROM  payment_aggregation
+        FROM  payments
         INNER JOIN
-            nodes on payment_aggregation.node_id = nodes.id
+            nodes on payments.node_id = nodes.id
             AND core = false
             AND banned_at is NULL
             AND status = 'paid'
