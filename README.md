@@ -207,10 +207,11 @@ saturn-contracts -- --rpc-url $RPC_URL claim --addr-to-claim $NODE_FIL_ADDRESS -
 
 
 - `--method` refers to the method you will be claiming with and has three options:
-	- "ledger" -> claim with your ledger wallet.
-	- "lotus" -> claim with your lotus node.
-	- "local" -> claim using a private key (recommended only for testing).
+	- `ledger` -> claim with your ledger wallet.
+	- `lotus` -> claim with your lotus node.
+	- `local` -> claim using a private key (recommended only for testing).
 
+If you use `local`, the supported key types are BLS and SECP256K1. For both key types, using the hex encoded are ascii encoded version of the key is supported.
 
 ### Multisig Payouts:
 

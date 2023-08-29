@@ -263,6 +263,50 @@ pub fn write_payout_csv(
     Ok(())
 }
 
+/// Converts a hexadecimal string representing a JSON object to its ASCII representation
+/// and then extracts the "PrivateKey" field from the JSON.
+///
+/// # Arguments
+///
+/// * `hex` - A string slice that holds the hexadecimal string.
+///
+/// # Examples
+///
+/// Given a hexadecimal string that represents the JSON `{"PrivateKey":"KeyValue"}`,
+/// this function will extract the "PrivateKey" field.
+///
+/// ```
+/// # use cli::utils::hex_to_ascii;
+/// assert_eq!(hex_to_ascii("7b22507269766174654b6579223a224b657956616c7565227d").unwrap(), "KeyValue");
+/// ```
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The provided string has an invalid hexadecimal format.
+/// - The resulting ASCII doesn't represent a valid JSON.
+/// - The "PrivateKey" field is missing from the JSON.
+///
+/// ```
+/// # use cli::utils::hex_to_ascii;
+/// let result = hex_to_ascii("68656c6c6f");
+/// assert!(result.is_err());
+/// ```
+pub fn hex_to_ascii(hex: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let bytes = (0..hex.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&hex[i..i + 2], 16))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let ascii_str = String::from_utf8_lossy(&bytes).into_owned();
+
+    let json: Value = serde_json::from_str(&ascii_str)?;
+    match json.get("PrivateKey") {
+        Some(private_key) => Ok(private_key.as_str().unwrap_or_default().to_string()),
+        None => Err("PrivateKey not found in JSON".into()),
+    }
+}
+
 pub async fn get_signing_method_and_address(
     method: &SigningOptions,
     ledger_account: u32,
@@ -312,6 +356,10 @@ pub async fn get_signing_method_and_address(
             let _ = io::stdout().flush().unwrap();
             let mut private_key = read_password().unwrap();
             private_key = String::from(private_key.trim());
+
+            if private_key.chars().all(|char| char.is_digit(16)) {
+                private_key = hex_to_ascii(&private_key).unwrap();
+            }
 
             let private_key_res = PrivateKey::try_from(private_key);
 
