@@ -1452,7 +1452,7 @@ pub fn format_u256(value: U256) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_u256, ATTO_FIL};
+    use super::{format_u256, hex_to_ascii, ATTO_FIL};
     use ethabi::ethereum_types::U256;
 
     #[test]
@@ -1497,5 +1497,42 @@ mod tests {
 
         println!("Formatted Values: {:?}", formatted_u256_values);
         assert_eq!(test_values, formatted_u256_values);
+    }
+
+    #[test]
+    fn test_valid_hex_to_private_key_conversion() {
+        let hex = "7b22507269766174654b6579223a2252616e646f6d4b657956616c7565227d";
+        let result = hex_to_ascii(hex).unwrap();
+        assert_eq!(result, "RandomKeyValue");
+    }
+
+    #[test]
+    fn test_invalid_hex() {
+        let hex = "7g22507269766174654b6579223a2252616e646f6d4b657956616c7565227d";
+        let result = hex_to_ascii(hex);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_missing_private_key_in_json() {
+        // The hex represents `{"SomeKey":"SomeValue"}`
+        let hex = "7b22536f6d654b6579223a22536f6d6556616c7565227d";
+        let result = hex_to_ascii(hex);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_json() {
+        // The hex represents `{"PrivateKey" "RandomKeyValue"}`
+        let hex = "7b22507269766174654b657922202252616e646f6d4b657956616c7565227d";
+        let result = hex_to_ascii(hex);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_empty_hex() {
+        let hex = "";
+        let result = hex_to_ascii(hex);
+        assert!(result.is_err());
     }
 }
