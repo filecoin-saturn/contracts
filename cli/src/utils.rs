@@ -1368,7 +1368,7 @@ pub struct StateActorInfo {
     pub nonce: u64,
 }
 
-const GAS_LIMIT_MULTIPLIER: u64 = 150;
+const GAS_LIMIT_MULTIPLIER: u64 = 600;
 
 pub async fn get_gas_info(
     unsigned_message: Message,
