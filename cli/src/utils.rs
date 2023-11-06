@@ -1368,6 +1368,8 @@ pub struct StateActorInfo {
     pub nonce: u64,
 }
 
+// Increase this value to pad the gas limit. Higher values means
+// transactions are more likely to through. For context, 130 is typical.
 const GAS_LIMIT_MULTIPLIER: u64 = 600;
 
 pub async fn get_gas_info(
