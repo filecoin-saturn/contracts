@@ -353,15 +353,20 @@ cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace
 #### Write Payout CSVs:
 The `generate-monthly-payouts` command generates the monthly payout csv's for saturn. For the operation of the cassini group, this command generates three CSV files:
 
-- A `Finance` specific file that that parses payouts such that the last column is the address of the `PayoutFactory` smart contract and represents the sum of all the Cassini member earnings.
-- A `Global` payout file that represents the payouts of each invidividual filecoin address. This will be used for record keeping.
-- A `Cassini` specific file that represents the payouts of each cassini member. This will be used to deploy a PaymentSplitter contract.
+This requires a database connection:
+- Generate a local `.env` file to store DB credentials. There is a `.env-example` file in the root directory of the `cli` that outlines the exact variables required to establish a database connection. Here are variables you need:
+	- `PG_PASSWORD`
+	- `PG_HOST`
+	- `PG_DATABASE`
+	- `PG_PORT`
+	- `PG_USER`
+
 
 To run the command:
 
 ```bash
 cd ./cli
-cargo run --bin saturn-contracts -- -S secrets/.secret -U https://api.hyperspace.node.glif.io/rpc/v1 --retries=10 generate-monthly-payout -D 2023-01 -F $FILECOIN_FACTORY_ADRESS
+cargo run --bin saturn-contracts -- --retries=10 generate-monthly-payout -D 2023-01 -F $FILECOIN_FACTORY_ADRESS
 ```
 ### Hardhat Integration
 
