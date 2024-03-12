@@ -170,7 +170,7 @@ pub fn key_derive(
 ) -> Result<ExtendedKey, SignerError> {
     let esk = derive_extended_secret_key_from_mnemonic(mnemonic, path, password, language_code)?;
 
-    let mut address = Address::new_secp256k1(esk.public_key().as_ref())?;
+    let address = Address::new_secp256k1(esk.public_key().as_ref())?;
 
     let bip44_path = BIP44Path::from_string(path)?;
 
@@ -198,7 +198,7 @@ pub fn key_derive(
 pub fn key_derive_from_seed(seed: &[u8], path: &str) -> Result<ExtendedKey, SignerError> {
     let esk = derive_extended_secret_key(seed, path)?;
 
-    let mut address = Address::new_secp256k1(esk.public_key().as_ref())?;
+    let address = Address::new_secp256k1(esk.public_key().as_ref())?;
 
     let bip44_path = BIP44Path::from_string(path)?;
 
@@ -256,7 +256,7 @@ pub fn key_recover_bls(
 ) -> Result<ExtendedKey, SignerError> {
     let sk = bls_signatures::PrivateKey::from_bytes(&private_key.0)?;
 
-    let mut address = Address::new_bls(&sk.public_key().as_bytes())?;
+    let address = Address::new_bls(&sk.public_key().as_bytes())?;
 
     let mut network_str = "f".to_owned();
     if testnet {
@@ -408,7 +408,7 @@ fn verify_secp256k1_signature(signature: &Signature, cbor: &Vec<u8>) -> Result<b
     let blob_to_sign = libsecp256k1::Message::parse_slice(&message_digest)?;
 
     let public_key = libsecp256k1::recover(&blob_to_sign, &signature_rs, &recovery_id)?;
-    let mut from = Address::new_secp256k1(public_key.serialize().as_ref())?;
+    let from = Address::new_secp256k1(public_key.serialize().as_ref())?;
 
     let tx_from = match tx {
         MessageTxAPI::Message(tx) => tx.from,
@@ -808,7 +808,7 @@ pub fn verify_voucher_signature(
                 let recovery_id = libsecp256k1::RecoveryId::parse(signature.bytes()[64])?;
                 let message = libsecp256k1::Message::parse(&digest);
                 let public_key = libsecp256k1::recover(&message, &sig, &recovery_id)?;
-                let mut signer = Address::new_secp256k1(public_key.serialize().as_ref())?;
+                let signer = Address::new_secp256k1(public_key.serialize().as_ref())?;
 
                 if signer.to_string() != address.to_string() {
                     Err(SignerError::GenericString(
