@@ -239,7 +239,7 @@ pub fn key_recover(private_key: &PrivateKey, testnet: bool) -> Result<ExtendedKe
     Ok(ExtendedKey {
         private_key: PrivateKey(secret_key.serialize()),
         public_key: PublicKey::SECP256K1PublicKey(public_key),
-        address: address,
+        address,
     })
 }
 
