@@ -48,7 +48,6 @@ use std::sync::Arc;
 use tabled::{settings::object::Object, Table, Tabled};
 use url::Url;
 
-const FAILURE_FILE: &str = "./SuccessfulPayouts{}";
 const ADMIN_ROLE: [u8; 32] = [0; 32];
 
 const LOTUS_RPC_URL: &str = "http://127.0.0.1:1234/rpc/v1";
@@ -451,7 +450,7 @@ pub async fn propose_payout_batch(
         Ok(message) => message,
         Err(error) => {
             let date = chrono::offset::Utc::now().to_string();
-            let file_path = PathBuf::from(&format!("{}{}", FAILURE_FILE, date));
+            let file_path = PathBuf::from(&format!("./SignatureFailedPayouts{}", date));
             write_payout_csv(&file_path, &payees, &shares).unwrap();
             panic!(
                 "Error signing multisig propose message for batch payout at index range {:?} .. {:?}:  {:?}",
@@ -467,7 +466,7 @@ pub async fn propose_payout_batch(
         Ok(mpool_push) => mpool_push,
         Err(error) => {
             let date = chrono::offset::Utc::now().to_string();
-            let file_path = PathBuf::from(&format!("{}{}", FAILURE_FILE, date));
+            let file_path = PathBuf::from(&format!("./MpoolPushFailedPayouts{}", date));
             write_payout_csv(&file_path, &payees, &shares).unwrap();
             panic!(
                 "MpoolPush error for proposing batch payout at index range {:?} .. {:?}:  {:?}",
@@ -1108,7 +1107,7 @@ pub async fn deploy_payout_batch<S: Middleware + 'static>(
         Ok(gas) => gas,
         Err(error) => {
             let date = chrono::offset::Utc::now().to_string();
-            let file_path = PathBuf::from(&format!("{}{}", FAILURE_FILE, date));
+            let file_path = PathBuf::from(&format!("./GasEstimateFailedPayouts{}", date));
             write_payout_csv(&file_path, &payees, &shares).unwrap();
             panic!(
                 "Error estimating gas for batch payout at index range {:?} .. {:?}:  {:?}",
@@ -1124,12 +1123,11 @@ pub async fn deploy_payout_batch<S: Middleware + 'static>(
     );
 
     let receipt_result = send_tx(&payout_tx.tx, client, retries).await;
-
     let receipt = match receipt_result {
         Ok(receipt) => receipt,
         Err(error) => {
             let date = chrono::offset::Utc::now().to_string();
-            let file_path = PathBuf::from(&format!("{}{}", FAILURE_FILE, date));
+            let file_path = PathBuf::from(&format!("./ReceiptFailedPayouts{}", date));
             write_payout_csv(&file_path, &payees, &shares).unwrap();
             panic!(
                 "Error deploying batch payout at index range {:?} .. {:?}:  {:?}",
