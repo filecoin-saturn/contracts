@@ -239,7 +239,7 @@ pub fn format_date(date: &str) -> Result<DateTime<Utc>, Box<dyn Error>> {
 }
 
 /// Writes a payout csv to a given path locally.
-pub fn write_payout_csv(
+fn write_payout_csv(
     path: &PathBuf,
     payees: &Vec<String>,
     shares: &Vec<f64>,
