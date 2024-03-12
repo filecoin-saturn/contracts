@@ -21,7 +21,7 @@ use crate::utils::{
     generate_monthly_payout, get_pending_transaction_multisig, get_signing_method_and_address,
     get_unreleased_payout_contracts, grant_admin, inspect_earnings, inspect_multisig, new_payout,
     propose_payout, release_selected_payouts, release_selected_payouts_filecoin_signing,
-    SigningOptions,
+    revoke_admin, SigningOptions,
 };
 
 #[allow(missing_docs)]
