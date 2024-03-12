@@ -1110,7 +1110,7 @@ pub async fn deploy_payout_batch<S: Middleware + 'static>(
         Err(error) => {
             write_failure_csv("GasEstimateFailedPayouts", &payees, &shares);
             panic!(
-                "Error estimating gas for batch payout {:?} .. {:?}:  {:?}",
+                "Error estimating gas for batch payout at index range {:?} .. {:?}:  {:?}",
                 start_index, end_index, error
             );
         }
