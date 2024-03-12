@@ -1007,6 +1007,35 @@ pub async fn grant_admin<S: ::ethers::providers::Middleware + 'static>(
     Ok(())
 }
 
+pub async fn revoke_admin<S: ::ethers::providers::Middleware + 'static>(
+    client: Arc<S>,
+    retries: usize,
+    gas_price: U256,
+    factory_addr: &str,
+    address_to_revoke: &str,
+    rpc_url: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let addr = Address::from_str(factory_addr)?;
+    let factory: PayoutFactory<_> = PayoutFactory::new(addr, client.clone());
+    let address_to_revoke = filecoin_to_eth_address(address_to_revoke, rpc_url)
+        .await
+        .unwrap();
+    let address_to_revoke = Address::from_str(address_to_revoke.as_str())?;
+
+    let mut claim_tx = factory.revoke_role(ADMIN_ROLE.into(), address_to_revoke);
+    let tx = claim_tx.tx.clone();
+    set_tx_gas(
+        &mut claim_tx.tx,
+        client.estimate_gas(&tx, None).await?,
+        gas_price,
+    );
+
+    info!("estimated grant gas cost {:#?}", claim_tx.tx.gas().unwrap());
+
+    send_tx(&claim_tx.tx, client, retries).await?;
+    Ok(())
+}
+
 pub async fn propose_payout(
     actor_address: &str,
     receiver_address: &str,
