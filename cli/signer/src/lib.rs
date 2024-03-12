@@ -1,6 +1,5 @@
 #![cfg_attr(not(test), deny(clippy::expect_used,))]
 use std::convert::TryFrom;
-use std::str::FromStr;
 
 use bip39::{Language, MnemonicType, Seed};
 use bls_signatures::Serialize;
@@ -14,8 +13,8 @@ use zx_bip44::BIP44Path;
 use fil_actor_init::{ExecParams, Method as MethodInit};
 use fil_actor_multisig as multisig;
 use fil_actor_paych as paych;
-use fvm_ipld_encoding::{from_slice, to_vec, Cbor, RawBytes};
-use fvm_shared::address::{set_current_network, Address, Network, Protocol};
+use fvm_ipld_encoding::{from_slice, to_vec, RawBytes};
+use fvm_shared::address::{Address, Network, Protocol};
 
 use bls_signatures::PublicKey as BLSPublicKey;
 use libsecp256k1::PublicKey as SECP256K1PublicKey;
