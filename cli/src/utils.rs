@@ -1061,7 +1061,7 @@ pub async fn propose_payout(
 
 fn write_failure_csv(filename: &str, payees: &Vec<String>, shares: &Vec<f64>) {
     let date = chrono::offset::Utc::now().to_string();
-    let file_path = PathBuf::from(&format!("./{}{}", filename, date));
+    let file_path = PathBuf::from(&format!("./{}{}", date, filename));
     write_payout_csv(&file_path, &payees, &shares).unwrap();
 }
 
