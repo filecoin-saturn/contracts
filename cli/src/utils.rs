@@ -239,7 +239,7 @@ pub fn format_date(date: &str) -> Result<DateTime<Utc>, Box<dyn Error>> {
 }
 
 /// Writes a payout csv to a given path locally.
-pub fn write_payout_csv(
+fn write_payout_csv(
     path: &PathBuf,
     payees: &Vec<String>,
     shares: &Vec<f64>,
@@ -449,9 +449,7 @@ pub async fn propose_payout_batch(
     let signed_message = match signed_message_result {
         Ok(message) => message,
         Err(error) => {
-            let date = chrono::offset::Utc::now().to_string();
-            let file_path = PathBuf::from(&format!("./FailedPayouts{}", date));
-            write_payout_csv(&file_path, &payees, &shares).unwrap();
+            write_failure_csv("SignatureFailedPayouts", &payees, &shares);
             panic!(
                 "Error signing multisig propose message for batch payout at index range {:?} .. {:?}:  {:?}",
                 start_index, end_index, error
@@ -465,9 +463,7 @@ pub async fn propose_payout_batch(
     let _ = match mpool_push_result {
         Ok(mpool_push) => mpool_push,
         Err(error) => {
-            let date = chrono::offset::Utc::now().to_string();
-            let file_path = PathBuf::from(&format!("./FailedPayouts{}", date));
-            write_payout_csv(&file_path, &payees, &shares).unwrap();
+            write_failure_csv("MpoolPushFailedPayouts", &payees, &shares);
             panic!(
                 "MpoolPush error for proposing batch payout at index range {:?} .. {:?}:  {:?}",
                 start_index, end_index, error
@@ -1063,6 +1059,12 @@ pub async fn propose_payout(
     Ok(())
 }
 
+fn write_failure_csv(filename: &str, payees: &Vec<String>, shares: &Vec<f64>) {
+    let date = chrono::offset::Utc::now().to_string();
+    let file_path = PathBuf::from(&format!("./{}{}", date, filename));
+    write_payout_csv(&file_path, &payees, &shares).unwrap();
+}
+
 // Deploys a PaymentSplitter batch of node operator payouts.
 pub async fn deploy_payout_batch<S: Middleware + 'static>(
     start_index: usize,
@@ -1106,13 +1108,11 @@ pub async fn deploy_payout_batch<S: Middleware + 'static>(
     let gas_estimate = match gas_estimate_result {
         Ok(gas) => gas,
         Err(error) => {
-            let date = chrono::offset::Utc::now().to_string();
-            let file_path = PathBuf::from(&format!("./FailedPayouts{}", date));
-            write_payout_csv(&file_path, &payees, &shares).unwrap();
+            write_failure_csv("GasEstimateFailedPayouts", &payees, &shares);
             panic!(
                 "Error estimating gas for batch payout at index range {:?} .. {:?}:  {:?}",
                 start_index, end_index, error
-            )
+            );
         }
     };
     set_tx_gas(&mut payout_tx.tx, gas_estimate, gas_price);
@@ -1123,13 +1123,10 @@ pub async fn deploy_payout_batch<S: Middleware + 'static>(
     );
 
     let receipt_result = send_tx(&payout_tx.tx, client, retries).await;
-
     let receipt = match receipt_result {
         Ok(receipt) => receipt,
         Err(error) => {
-            let date = chrono::offset::Utc::now().to_string();
-            let file_path = PathBuf::from(&format!("./FailedPayouts{}", date));
-            write_payout_csv(&file_path, &payees, &shares).unwrap();
+            write_failure_csv("ReceiptFailedPayouts", &payees, &shares);
             panic!(
                 "Error deploying batch payout at index range {:?} .. {:?}:  {:?}",
                 start_index, end_index, error
