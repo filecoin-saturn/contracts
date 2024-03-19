@@ -48,6 +48,7 @@ use std::sync::Arc;
 use tabled::{settings::object::Object, Table, Tabled};
 use url::Url;
 
+const EXPLORER_ADDR: &str = "https://explorer.glif.io/tx";
 const ADMIN_ROLE: [u8; 32] = [0; 32];
 
 const LOTUS_RPC_URL: &str = "http://127.0.0.1:1234/rpc/v1";
@@ -1003,7 +1004,13 @@ pub async fn grant_admin<S: ::ethers::providers::Middleware + 'static>(
 
     info!("estimated grant gas cost {:#?}", claim_tx.tx.gas().unwrap());
 
-    send_tx(&claim_tx.tx, client, retries).await?;
+    let receipt_result = send_tx(&claim_tx.tx, client, retries).await?;
+    let transaction_hash = receipt_result.block_hash.unwrap();
+    info!(
+        "admin granted successfully to '{}'. check {}/{}/",
+        address_to_grant, EXPLORER_ADDR, transaction_hash,
+    );
+
     Ok(())
 }
 
@@ -1032,7 +1039,13 @@ pub async fn revoke_admin<S: ::ethers::providers::Middleware + 'static>(
 
     info!("estimated grant gas cost {:#?}", claim_tx.tx.gas().unwrap());
 
-    send_tx(&claim_tx.tx, client, retries).await?;
+    let receipt_result = send_tx(&claim_tx.tx, client, retries).await?;
+    let transaction_hash = receipt_result.block_hash.unwrap();
+    info!(
+        "admin granted successfully to '{}'. check {}/{}/",
+        address_to_revoke, EXPLORER_ADDR, transaction_hash,
+    );
+
     Ok(())
 }
 
