@@ -142,6 +142,26 @@ fn cli_4_claim() -> Result<(), Box<dyn std::error::Error>> {
         factory_addr,
         "--addr-to-claim",
         RECIPIENT_ADDRESS,
+    ];
+    args.append(&mut new_payout_args);
+
+    let mut cmd = Command::cargo_bin("saturn-contracts")?;
+    cmd.args(&args);
+    cmd.output().ok();
+    Ok(())
+}
+
+#[test]
+fn cli_5_grant_admin() -> Result<(), Box<dyn std::error::Error>> {
+    let mut args = get_const_cli_args();
+
+    let factory_addr = &FACTORY_ADDRESS.lock().unwrap();
+    let mut new_payout_args = vec![
+        "grant-admin",
+        "--factory-addr",
+        factory_addr,
+        "--address",
+        RECIPIENT_ADDRESS,
         "--offset",
         "0",
     ];
