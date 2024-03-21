@@ -1005,10 +1005,9 @@ pub async fn grant_admin<S: ::ethers::providers::Middleware + 'static>(
     info!("estimated grant gas cost {:#?}", claim_tx.tx.gas().unwrap());
 
     let receipt_result = send_tx(&claim_tx.tx, client, retries).await?;
-    let transaction_hash = receipt_result.block_hash.unwrap();
     info!(
         "admin granted successfully to '{}'. check {}/{}/",
-        address_to_grant, EXPLORER_ADDR, transaction_hash,
+        address_to_grant, EXPLORER_ADDR, receipt_result.transaction_hash,
     );
 
     Ok(())
@@ -1040,10 +1039,9 @@ pub async fn revoke_admin<S: ::ethers::providers::Middleware + 'static>(
     info!("estimated grant gas cost {:#?}", claim_tx.tx.gas().unwrap());
 
     let receipt_result = send_tx(&claim_tx.tx, client, retries).await?;
-    let transaction_hash = receipt_result.block_hash.unwrap();
     info!(
-        "admin granted successfully to '{}'. check {}/{}/",
-        address_to_revoke, EXPLORER_ADDR, transaction_hash,
+        "admin revoked successfully from '{}'. check {}/{}/",
+        address_to_revoke, EXPLORER_ADDR, receipt_result.transaction_hash,
     );
 
     Ok(())
