@@ -11,8 +11,9 @@
 
 > Repo for Saturn Payouts Solidity Contracts
 
+**Note: never run the `new-payout` cli command multiple times. Even in the case of a failure, this will ALWAYS result in at least part of the payments being dispersed more than once. Work with the output files suffixed with `FailedPayouts` to recover from failures.**
 
-## What this
+## What's this
 
 The first contract implements a simple payment splitter which, when instantiated, takes in a list of payees and shares owed.
 
