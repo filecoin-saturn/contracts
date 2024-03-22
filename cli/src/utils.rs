@@ -48,6 +48,7 @@ use std::sync::Arc;
 use tabled::{settings::object::Object, Table, Tabled};
 use url::Url;
 
+const EXPLORER_ADDR: &str = "https://explorer.glif.io/tx";
 const ADMIN_ROLE: [u8; 32] = [0; 32];
 
 const LOTUS_RPC_URL: &str = "http://127.0.0.1:1234/rpc/v1";
@@ -1003,7 +1004,46 @@ pub async fn grant_admin<S: ::ethers::providers::Middleware + 'static>(
 
     info!("estimated grant gas cost {:#?}", claim_tx.tx.gas().unwrap());
 
-    send_tx(&claim_tx.tx, client, retries).await?;
+    let receipt_result = send_tx(&claim_tx.tx, client, retries).await?;
+    info!(
+        "admin granted successfully to '{}'. check {}/{}/",
+        address_to_grant, EXPLORER_ADDR, receipt_result.transaction_hash,
+    );
+
+    Ok(())
+}
+
+pub async fn revoke_admin<S: ::ethers::providers::Middleware + 'static>(
+    client: Arc<S>,
+    retries: usize,
+    gas_price: U256,
+    factory_addr: &str,
+    address_to_revoke: &str,
+    rpc_url: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let addr = Address::from_str(factory_addr)?;
+    let factory: PayoutFactory<_> = PayoutFactory::new(addr, client.clone());
+    let address_to_revoke = filecoin_to_eth_address(address_to_revoke, rpc_url)
+        .await
+        .unwrap();
+    let address_to_revoke = Address::from_str(address_to_revoke.as_str())?;
+
+    let mut claim_tx = factory.revoke_role(ADMIN_ROLE.into(), address_to_revoke);
+    let tx = claim_tx.tx.clone();
+    set_tx_gas(
+        &mut claim_tx.tx,
+        client.estimate_gas(&tx, None).await?,
+        gas_price,
+    );
+
+    info!("estimated grant gas cost {:#?}", claim_tx.tx.gas().unwrap());
+
+    let receipt_result = send_tx(&claim_tx.tx, client, retries).await?;
+    info!(
+        "admin revoked successfully from '{}'. check {}/{}/",
+        address_to_revoke, EXPLORER_ADDR, receipt_result.transaction_hash,
+    );
+
     Ok(())
 }
 

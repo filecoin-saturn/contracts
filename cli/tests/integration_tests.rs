@@ -1,7 +1,6 @@
 use assert_cmd::prelude::*;
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::NamedTempFile;
-use chrono::format;
 use cli::utils::{random_filecoin_address, ATTO_FIL};
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -145,6 +144,46 @@ fn cli_4_claim() -> Result<(), Box<dyn std::error::Error>> {
         RECIPIENT_ADDRESS,
         "--offset",
         "0",
+    ];
+    args.append(&mut new_payout_args);
+
+    let mut cmd = Command::cargo_bin("saturn-contracts")?;
+    cmd.args(&args);
+    cmd.output().ok();
+    Ok(())
+}
+
+#[test]
+fn cli_5_grant_admin() -> Result<(), Box<dyn std::error::Error>> {
+    let mut args = get_const_cli_args();
+
+    let factory_addr = &FACTORY_ADDRESS.lock().unwrap();
+    let mut new_payout_args = vec![
+        "grant-admin",
+        "--factory-addr",
+        factory_addr,
+        "--address",
+        RECIPIENT_ADDRESS,
+    ];
+    args.append(&mut new_payout_args);
+
+    let mut cmd = Command::cargo_bin("saturn-contracts")?;
+    cmd.args(&args);
+    cmd.output().ok();
+    Ok(())
+}
+
+#[test]
+fn cli_6_revoke_admin() -> Result<(), Box<dyn std::error::Error>> {
+    let mut args = get_const_cli_args();
+
+    let factory_addr = &FACTORY_ADDRESS.lock().unwrap();
+    let mut new_payout_args = vec![
+        "revoke-admin",
+        "--factory-addr",
+        factory_addr,
+        "--address",
+        RECIPIENT_ADDRESS,
     ];
     args.append(&mut new_payout_args);
 

@@ -21,7 +21,7 @@ use crate::utils::{
     generate_monthly_payout, get_pending_transaction_multisig, get_signing_method_and_address,
     get_unreleased_payout_contracts, grant_admin, inspect_earnings, inspect_multisig, new_payout,
     propose_payout, release_selected_payouts, release_selected_payouts_filecoin_signing,
-    SigningOptions,
+    revoke_admin, SigningOptions,
 };
 
 #[allow(missing_docs)]
@@ -353,6 +353,35 @@ impl Cli {
                     .await?;
                 }
             }
+            Commands::RevokeAdmin {
+                address,
+                factory_addr,
+            } => {
+                if self.secret.is_some() {
+                    let client = get_wallet(self.secret.unwrap(), provider).await?;
+                    revoke_admin(
+                        client.clone(),
+                        self.retries,
+                        gas_price,
+                        factory_addr,
+                        address,
+                        &self.rpc_url,
+                    )
+                    .await?;
+                } else {
+                    let client = get_ledger_signing_provider(provider, chain_id.as_u64()).await?;
+                    let client = Arc::new(client);
+                    revoke_admin(
+                        client.clone(),
+                        self.retries,
+                        gas_price,
+                        factory_addr,
+                        address,
+                        &self.rpc_url,
+                    )
+                    .await?;
+                }
+            }
             Commands::InspectEarnings {
                 address,
                 factory_address,
@@ -515,6 +544,17 @@ pub enum Commands {
     #[command(arg_required_else_help = true)]
     GrantAdmin {
         /// Address to grant role to
+        #[arg(short = 'A', long)]
+        address: String,
+        /// PayoutFactory Ethereum address.
+        #[arg(short = 'F', long)]
+        factory_addr: String,
+    },
+    /// Revokes an admin role from a payout factory contract. The issuing address
+    /// has to be an admin on the contract.
+    #[command(arg_required_else_help = true)]
+    RevokeAdmin {
+        /// Address to revoke role from
         #[arg(short = 'A', long)]
         address: String,
         /// PayoutFactory Ethereum address.
